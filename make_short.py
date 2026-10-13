@@ -79,7 +79,7 @@ Reply with ONLY JSON:
 "title": "under 70 chars, keyword first, ends with #shorts",
 "description": "2-3 keyword-rich sentences, then a source line, then 5 hashtags",
 "tags": ["10-15 search keywords"],
-"visuals": [{{"word": "one key word copied exactly from the script", "query": "2-4 word photo search for it"}}]}}
+"visuals": [{{"word": "one key word copied exactly from the script", "query": "2-4 word photo search for it", "wiki": "exact English Wikipedia article title if it is a specific company, product, person or place, else empty"}}]}}
 For "visuals" give 10-14 items, roughly one every 3 seconds: the main nouns (companies, products, people, objects, places), in script order, never in the first sentence."""
     if os.getenv("OPENROUTER_API_KEY"):
         import httpx
@@ -192,8 +192,34 @@ def norm(w):
     return re.sub(r"\W", "", w.lower())
 
 
+UA = {"User-Agent": "AISLOP/1.0 (SubtleSpawns YouTube Shorts)"}
+
+
+def wiki_image(title):
+    """Freely licensed lead image of a Wikipedia article (logos, products, people) plus its credit."""
+    import httpx
+    base = {"action": "query", "prop": "pageimages", "piprop": "thumbnail|name", "pithumbsize": 900,
+            "pilicense": "free", "redirects": 1, "format": "json"}
+    for extra in ({"titles": title}, {"generator": "search", "gsrsearch": title, "gsrlimit": 1}):
+        pages = httpx.get("https://en.wikipedia.org/w/api.php", params=base | extra, headers=UA, timeout=30
+                          ).json().get("query", {}).get("pages", {})
+        page = next((p for p in pages.values() if p.get("thumbnail")), None)
+        if page:
+            break
+    else:
+        return None
+    meta = httpx.get("https://commons.wikimedia.org/w/api.php", headers=UA, timeout=30, params={
+        "action": "query", "titles": "File:" + page["pageimage"], "prop": "imageinfo", "iiprop": "extmetadata", "format": "json"}
+        ).json()["query"]["pages"]
+    ext = next(iter(meta.values())).get("imageinfo", [{}])[0].get("extmetadata", {})
+    artist = re.sub("<[^>]+>", "", ext.get("Artist", {}).get("value", "")).strip() or "Wikimedia Commons"
+    lic = ext.get("LicenseShortName", {}).get("value", "free license")
+    return {"url": page["thumbnail"]["source"], "credit": f"\"{page['pageimage']}\" by {artist} ({lic}) "
+            f"https://commons.wikimedia.org/wiki/File:{page['pageimage'].replace(' ', '_')}"}
+
+
 def fetch_images(visuals, words, work, total):
-    """Free Creative Commons photos (Openverse) shown for 2s when their word is spoken."""
+    """Free photos (Wikipedia first, then Openverse) shown when their word is spoken."""
     import httpx
     shown, last_end = [], 3.4          # stay clear of the opening hook card
     for n, v in enumerate(visuals):
@@ -203,11 +229,20 @@ def fetch_images(visuals, words, work, total):
             continue
         try:
             pick = None
-            # try the full query, then just the key word, so fewer words end up without a photo
-            for q in dict.fromkeys([v["query"], v["word"]]):
+            if v.get("wiki"):
+                try:
+                    pick = wiki_image(v["wiki"])
+                except Exception as e:
+                    print(f"Wikipedia lookup failed for '{v['wiki']}' ({type(e).__name__})")
+                if pick:
+                    print(f"Wikipedia image for '{v['word']}'")
+            # Openverse: try the full query, then just the key word, so fewer words end up without a photo
+            for q in ([] if pick else dict.fromkeys([v["query"], v["word"]])):
                 res = httpx.get("https://api.openverse.org/v1/images/", headers={"User-Agent": "AISLOP/1.0"}, timeout=30,
                                 params={"q": q, "license_type": "commercial", "page_size": 10}).json()["results"]
-                pick = next((r for r in res if r["url"].lower().split("?")[0].endswith((".jpg", ".jpeg", ".png"))), None)
+                pick = next(({"url": r["url"], "credit": f"\"{r.get('title') or 'Photo'}\" by {r.get('creator') or 'unknown'} "
+                              f"({r['license'].upper()} {r.get('license_version') or ''}) {r.get('foreign_landing_url') or r['url']}"}
+                             for r in res if r["url"].lower().split("?")[0].endswith((".jpg", ".jpeg", ".png"))), None)
                 if pick:
                     break
             if not pick:
@@ -218,8 +253,7 @@ def fetch_images(visuals, words, work, total):
             print(f"No image for '{v['word']}' ({type(e).__name__})")
             continue
         end = min(t + 1.8, total)
-        credit = f"\"{pick.get('title') or 'Photo'}\" by {pick.get('creator') or 'unknown'} ({pick['license'].upper()} {pick.get('license_version') or ''}) {pick.get('foreign_landing_url') or pick['url']}"
-        shown.append((img, t, end, credit))
+        shown.append((img, t, end, pick["credit"]))
         last_end = end + 0.1
     print(f"Images: {len(shown)}")
     return shown
