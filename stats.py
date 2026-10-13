@@ -11,7 +11,7 @@ Usage:  python stats.py
 import csv, json
 from collections import defaultdict
 
-from make_short import OUT_DIR, STATS, get_youtube, llm, parse_json, read_runs, write_runs
+from make_short import OUT_DIR, PRIVACY, STATS, get_youtube, llm, parse_json, read_runs, write_runs
 
 STAT_FIELDS = ["date", "time", "video_id", "title", "topic", "series", "privacy", "views", "likes", "comments"]
 
@@ -102,12 +102,29 @@ def draft_replies(yt, stats):
     print(f"\nDrafted {len(lines) - 1} replies in replies.md")
 
 
+def republish(yt, rows):
+    """YouTube can lock uploads from unaudited apps as private; flip them back to public."""
+    ids = [r["video_id"] for r in rows if r.get("video_id")][-50:]
+    if not ids:
+        return
+    for v in yt.videos().list(part="status", id=",".join(ids)).execute().get("items", []):
+        if v["status"]["privacyStatus"] == "private" and v["status"]["uploadStatus"] == "processed":
+            try:
+                yt.videos().update(part="status", body={"id": v["id"], "status": {
+                    "privacyStatus": "public", "selfDeclaredMadeForKids": False}}).execute()
+                print(f"Made {v['id']} public")
+            except Exception as e:
+                print(f"Couldn't make {v['id']} public ({type(e).__name__}) - do it in YouTube Studio")
+
+
 def main():
     rows = read_runs()
     if not any(r.get("video_id") for r in rows):
         print("No uploaded Shorts yet.")
         return
     yt = get_youtube()
+    if PRIVACY == "public":
+        republish(yt, rows)
     stats = fetch_stats(yt, rows)
     report(stats)
     post_pending_comments(yt, rows, stats)
