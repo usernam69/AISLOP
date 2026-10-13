@@ -37,10 +37,28 @@ def fetch_headlines(n=8):
     items = []
     for url in FEEDS:
         for e in feedparser.parse(url).entries[:6]:
-            if e.get("link") not in used and not re.search(r"(?i)elect|donat|republican|democrat|trump|senate|congress|box office|movie", e.title):
+            if e.get("link") not in used and not re.search(r"(?i)\b(elections?|electoral|donat\w*|republicans?|democrats?|trump|senate|congress|box office|movies?)\b", e.title):
                 summary = html.unescape(re.sub("<[^>]+>", "", e.get("summary", ""))).replace("[…]", "")[:400]
                 items.append({"title": html.unescape(e.title), "link": e.link, "summary": summary})
     return items[:n]
+
+
+def clean_meta(meta, headlines):
+    """Fill missing fields and pin the link to a real headline so it's remembered as used."""
+    if not meta.get("script"):
+        raise ValueError("AI reply has no script")
+    links = {h["link"] for h in headlines}
+    if meta.get("link") not in links:
+        said = set(re.findall(r"\w+", (meta.get("title", "") + " " + meta["script"]).lower()))
+        best = max(headlines, key=lambda h: len(said & set(re.findall(r"\w+", h["title"].lower()))))
+        meta["link"] = best["link"]
+    title = meta.get("title") or meta["script"].split(".")[0][:60]
+    meta["title"] = title if "#shorts" in title.lower() else title + " #shorts"
+    meta.setdefault("hook_card", "Tech news in 40 seconds")
+    meta.setdefault("description", f"{meta['title']}\nSource: {meta['link']}\n#tech #technews #shorts")
+    if not isinstance(meta.get("tags"), list):
+        meta["tags"] = ["tech news", "technology", "shorts"]
+    return meta
 
 
 def write_script(headlines):
@@ -168,6 +186,7 @@ def tts_elevenlabs(text, mp3):
 
 
 def ass_time(t):
+    t = round(t, 2)  # round first so 59.996 can't print as "60.00"
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
 
 
@@ -226,6 +245,7 @@ def render(voice_mp3, subs, total, out_mp4):
 
 
 def upload(mp4, meta):
+    from google.auth.exceptions import RefreshError
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
@@ -235,9 +255,13 @@ def upload(mp4, meta):
     tok = HERE / "token.json"
     creds = Credentials.from_authorized_user_file(tok, scopes) if tok.exists() else None
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+        try:
+            if not (creds and creds.expired and creds.refresh_token):
+                raise RefreshError("no saved login")
             creds.refresh(Request())
-        else:
+        except RefreshError as e:
+            # Testing-mode apps lose their login after 7 days; sign in again
+            print(f"YouTube login expired ({e}); opening browser to sign in.")
             creds = InstalledAppFlow.from_client_secrets_file(HERE / "client_secret.json", scopes).run_local_server(port=0)
         tok.write_text(creds.to_json())
     yt = build("youtube", "v3", credentials=creds)
@@ -261,7 +285,7 @@ def main():
     headlines = fetch_headlines()
     if not headlines:
         sys.exit("No new headlines found.")
-    meta = write_script(headlines)
+    meta = clean_meta(write_script(headlines), headlines)
     (work / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     print("Title:", meta["title"])
 
