@@ -11,7 +11,7 @@ Usage:  python stats.py
 import csv, json
 from collections import defaultdict
 
-from make_short import OUT_DIR, PRIVACY, STATS, get_youtube, llm, parse_json, read_runs, write_runs
+from make_short import OUT_DIR, PRIVACY, STATS, VIEWER_QS, get_youtube, llm, parse_json, read_runs, write_runs
 
 STAT_FIELDS = ["date", "time", "video_id", "title", "topic", "series", "privacy", "views", "likes", "comments"]
 
@@ -87,6 +87,7 @@ def draft_replies(yt, stats):
             if t["snippet"]["totalReplyCount"] == 0 and c.get("authorChannelId", {}).get("value") != me:
                 todo.append({"video": s["title"], "author": c["authorDisplayName"], "comment": " ".join(c["textOriginal"].split())[:300],
                              "link": f"https://youtube.com/shorts/{s['video_id']}"})
+    save_viewer_questions(todo)
     if not todo:
         print("\nNo new comments to reply to.")
         return
@@ -100,6 +101,45 @@ def draft_replies(yt, stats):
             lines.append(f"**{item['author']}** on [{item['video']}]({item['link']}):\n> {item['comment']}\n\nDraft: {reply}\n")
     (OUT_DIR.parent / "replies.md").write_text("\n".join(lines), encoding="utf-8")
     print(f"\nDrafted {len(lines) - 1} replies in replies.md")
+
+
+def save_viewer_questions(todo):
+    """Questions viewers ask become Saturday 'Viewer Question' Shorts."""
+    qs = json.loads(VIEWER_QS.read_text(encoding="utf-8")) if VIEWER_QS.exists() else []
+    seen = {q["question"] for q in qs} | set(json.loads(VIEWER_QS.with_suffix(".done").read_text(encoding="utf-8"))
+                                             if VIEWER_QS.with_suffix(".done").exists() else [])
+    new = [{"author": t["author"], "question": t["comment"]} for t in todo
+           if "?" in t["comment"] and len(t["comment"]) > 15 and t["comment"] not in seen]
+    if new:
+        VIEWER_QS.write_text(json.dumps(qs + new, indent=1), encoding="utf-8")
+        VIEWER_QS.with_suffix(".done").write_text(json.dumps(sorted(seen | {q["question"] for q in new})), encoding="utf-8")
+        print(f"Saved {len(new)} viewer question(s) for Saturday Shorts")
+
+
+START_HERE = "Start Here: Best of SubtleSpawns"
+
+
+def update_start_here(yt, stats):
+    """Keep a 'Start here' playlist of the 10 most-viewed public Shorts."""
+    top = [s["video_id"] for s in sorted((s for s in stats if s["privacy"] == "public"), key=lambda s: -int(s["views"]))[:10]]
+    if len(top) < 3:
+        return
+    lists = yt.playlists().list(part="snippet", mine=True, maxResults=50).execute().get("items", [])
+    pid = next((p["id"] for p in lists if p["snippet"]["title"] == START_HERE), None)
+    if not pid:
+        pid = yt.playlists().insert(part="snippet,status", body={
+            "snippet": {"title": START_HERE, "description": "New here? Start with the most-watched SubtleSpawns tech Shorts."},
+            "status": {"privacyStatus": "public"}}).execute()["id"]
+    items = yt.playlistItems().list(part="snippet", playlistId=pid, maxResults=50).execute().get("items", [])
+    have = {i["snippet"]["resourceId"]["videoId"]: i["id"] for i in items}
+    for vid, item_id in have.items():
+        if vid not in top:
+            yt.playlistItems().delete(id=item_id).execute()
+    for vid in top:
+        if vid not in have:
+            yt.playlistItems().insert(part="snippet", body={"snippet": {"playlistId": pid,
+                                      "resourceId": {"kind": "youtube#video", "videoId": vid}}}).execute()
+    print(f"'{START_HERE}' playlist: top {len(top)} Shorts")
 
 
 def republish(yt, rows):
@@ -128,6 +168,10 @@ def main():
     stats = fetch_stats(yt, rows)
     report(stats)
     post_pending_comments(yt, rows, stats)
+    try:
+        update_start_here(yt, stats)
+    except Exception as e:
+        print(f"Start Here playlist failed ({type(e).__name__})")
     try:
         draft_replies(yt, stats)
     except Exception as e:

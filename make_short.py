@@ -48,15 +48,70 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googlea
 RUN_FIELDS = ["date", "time", "folder", "title", "topic", "series", "link", "video_id", "images", "voice", "privacy", "comment_posted"]
 
 # one theme per weekday (Monday = 0); "news" False means the script doesn't come from a headline
+SAVE = ' Before the follow line, say "Save this for later."'
+# Each weekday rotates through its formats week by week (ISO week number).
 SERIES = [
-    {"name": "AI Monday", "news": True, "brief": "Prefer an AI story."},
-    {"name": "Security Tuesday", "news": True, "brief": "Prefer a cybersecurity or privacy story."},
-    {"name": "Quiz Wednesday", "news": True, "brief": "Format: open with a quiz question about the story, reveal the answer near the end."},
-    {"name": "Tip Thursday", "news": False, "brief": "Ignore the headlines. Teach one evergreen, practical tech tip (phone, PC, privacy or productivity), step by step."},
-    {"name": "Myth-Busting Friday", "news": True, "brief": "Use the story to bust a popular tech myth connected to it."},
-    {"name": "Throwback Saturday", "news": False, "brief": "Ignore the headlines. Tell a 'this day in tech history' story for {today}: a real, well-documented event from this calendar date. Only use facts you are certain of."},
-    {"name": "Gadget Sunday", "news": True, "brief": "Prefer a gadget or hardware story."},
+    [{"name": "AI Monday", "news": True, "brief": "Prefer an AI story."},
+     {"name": "AI Tool Speedrun", "news": False, "brief": "Ignore the headlines. Show one real, free AI tool and one useful task it does, step by step, in under 40 seconds. Name the tool and where to get it." + SAVE},
+     {"name": "Explain Like I'm 10", "news": True, "brief": "Take the most confusing tech story and explain it in words a 10-year-old understands, with one everyday comparison."}],
+    [{"name": "Security Tuesday", "news": True, "brief": "Prefer a cybersecurity or privacy story."},
+     {"name": "Scam of the Week", "news": True, "brief": "Pick a scam, fraud or phishing story (or a well-known current scam if none). Explain how the scam works and give 2 concrete signs to spot it." + SAVE}],
+    [{"name": "Quiz Wednesday", "news": True, "brief": "Format: open with a quiz question about the story, reveal the answer near the end."},
+     {"name": "Myth or Fact", "news": False, "brief": "Ignore the headlines. Hook with a popular tech belief as a question (e.g. 'Does charging overnight ruin your battery?'). Keep the answer for the last third, then explain why. Only use well-established facts."}],
+    [{"name": "Tip Thursday", "news": False, "brief": "Ignore the headlines. Teach one evergreen, practical tech tip (phone, PC, privacy or productivity), step by step." + SAVE},
+     {"name": "Settings to Change Today", "news": False, "brief": "Ignore the headlines. Teach one hidden iPhone, Android or Windows setting worth changing today: where it is (exact menu path) and why." + SAVE},
+     {"name": "Shortcut Thursday", "news": False, "brief": "Ignore the headlines. Teach 3 real keyboard shortcuts (Windows, Mac or Chrome) that save time, each with the exact keys." + SAVE},
+     {"name": "Countdown", "news": False, "brief": "Ignore the headlines. A top-3 countdown (e.g. '3 apps quietly draining your battery'), number 3 first, number 1 last. Only real, current examples." + SAVE},
+     {"name": "Before and After", "news": False, "brief": "Ignore the headlines. 'Your phone/PC vs your phone/PC after these 2 changes': describe the problem, the 2 changes, and the result." + SAVE}],
+    [{"name": "Myth-Busting Friday", "news": True, "brief": "Use the story to bust a popular tech myth connected to it."},
+     {"name": "Tech in 1 Number", "news": True, "brief": "Build the Short around the single most striking number in the story: open with the number, then explain what it means."},
+     {"name": "Prediction Friday", "news": True, "brief": "Pick a story about something still coming (a launch, a rollout, a court decision). Make one clear, reasoned prediction about what happens next and say when we'll know."}],
+    [{"name": "Throwback Saturday", "news": False, "brief": "Ignore the headlines. Tell a 'this day in tech history' story for {today}: a real, well-documented event from this calendar date. Only use facts you are certain of."},
+     {"name": "What Happened To", "news": False, "brief": "Ignore the headlines. Tell the rise and fall of one well-known discontinued tech product or service (e.g. Google Glass, Vine, Zune): the hype, what went wrong, the lesson. Only use facts you are certain of."}],
+    [{"name": "Gadget Sunday", "news": True, "brief": "Prefer a gadget or hardware story."},
+     {"name": "Is It Worth It", "news": True, "brief": "Pick a gadget or product story. Give a verdict: the price, the main pro, the main con, and who should (and shouldn't) buy it."}],
 ]
+EVENT_WORDS = ("keynote", "unpacked", "wwdc", "apple event", "launch event", "made by google", "google i/o", "dev day")
+VIEWER_QS = HERE / "viewer_questions.json"   # written by stats.py
+PART2 = HERE / "part2.json"                  # tomorrow's cliffhanger follow-up
+
+
+def pick_series(now, headlines):
+    """Today's format: a planned Part 2, year in review, live event coverage, a viewer question, or the weekday rotation."""
+    if PART2.exists():
+        plan = json.loads(PART2.read_text(encoding="utf-8"))
+        PART2.unlink()
+        if plan.get("date") == now.date().isoformat():
+            return {"name": "Part 2", "news": False, "brief": "This is Part 2 of yesterday's Short. Open with 'Part 2:' and deliver "
+                    f"exactly this promised follow-up: {plan['brief']}"}
+    if now.month == 12 and now.day >= 30:
+        titles = [r["title"].replace("#shorts", "").strip() for r in read_runs() if r["date"][:4] == str(now.year) and r.get("video_id")]
+        return {"name": "Year in Review", "news": False, "brief": f"Ignore the headlines. Count down the 5 biggest tech stories of {now.year}, "
+                "choosing from our own Shorts this year: " + json.dumps(titles[-60:])}
+    if any(w in (h["title"] + " " + h["summary"]).lower() for h in headlines for w in EVENT_WORDS):
+        return {"name": "Event Coverage", "news": True, "brief": "A big tech launch event is happening. Cover the single most important "
+                "announcement from it: what was announced, price and release date if given, and whether it matters."}
+    if VIEWER_QS.exists() and now.weekday() == 5:   # Saturdays answer a viewer when someone asked
+        qs = json.loads(VIEWER_QS.read_text(encoding="utf-8"))
+        if qs:
+            q = qs.pop(0)
+            VIEWER_QS.write_text(json.dumps(qs), encoding="utf-8")
+            return {"name": "Viewer Question", "news": False, "brief": f"Ignore the headlines. Answer this question a viewer named {q['author']} "
+                    f"asked in our comments, and thank them by name in the first sentence: {q['question']}"}
+    rota = SERIES[now.weekday()]
+    return rota[now.isocalendar().week % len(rota)]
+
+
+def season_brief(today):
+    """Extra instruction for shopping seasons."""
+    md = (today.month, today.day)
+    if (11, 20) <= md <= (12, 2):
+        return " It's Black Friday season: if it fits, mention how to spot a fake 'discount' or whether to wait for a deal."
+    if (12, 3) <= md <= (12, 23):
+        return " It's holiday gift season: if it fits, frame the takeaway as a gift idea and price range."
+    if (8, 1) <= md <= (9, 10):
+        return " It's back-to-school season: if it fits, frame the takeaway for students."
+    return ""
 TOPICS = {  # subtitle highlight colour (ASS is &HBBGGRR) and hashtags per topic
     "ai": ("&H00FFB000", "#AI #ArtificialIntelligence #TechNews"),
     "security": ("&H004040FF", "#CyberSecurity #Privacy #TechNews"),
@@ -206,11 +261,12 @@ def channel_memory():
 
 def write_script(headlines, series):
     recent, best = channel_memory()
-    brief = series["brief"].format(today=dt.date.today().strftime("%B %d"))
+    brief = series["brief"].format(today=dt.date.today().strftime("%B %d")) + season_brief(dt.date.today())
     prompt = f"""You write YouTube Shorts for SubtleSpawns, a tech news & tips channel. The host is "Spawn".
 Tone: professional yet engaging, for a tech-savvy audience. No emojis in the script.
-Today's series: {series['name']}. {brief}
-Otherwise pick the ONE most interesting technology story below (gadgets, AI, software, security, science tech). Never pick politics, elections, donations, celebrities or movies.
+TODAY'S FORMAT: "{series['name']}". {brief}
+The format above overrides the default structure below wherever they differ: follow it exactly, and make the title and hook show the format.
+Unless the format says to ignore the headlines, pick the ONE most fitting technology story below (gadgets, AI, software, security, science tech). Never pick politics, elections, donations, celebrities or movies.
 Write a 40-50 second voiceover (110-130 words):
 - First sentence is a scroll-stopping hook (a surprising fact or question), max 12 words.
 - Then explain what happened and why it matters, plain language.
@@ -229,7 +285,8 @@ Reply with ONLY JSON:
 "tags": ["10-15 search keywords"],
 "topic": "one of: ai, security, gadgets, software, science, business",
 "mood": "one of: tense, upbeat, calm",
-"comment_question": "one short question to pin as the first comment, inviting viewers to reply",
+"comment_question": "a quick poll to pin as the first comment, answerable in one word or emoji, e.g. 'Would you buy this? Yes or no' or 'Did you know this? Yes / No'",
+"part2": "only if the story is genuinely too big for one Short: one sentence on what Part 2 tomorrow will cover (then end the script with 'Part 2 tomorrow.' instead of the loop line); otherwise empty",
 "visuals": [{{"word": "one key word copied exactly from the script", "query": "2-4 word photo search for it", "wiki": "exact English Wikipedia article title if it is a specific company, product, person or place, else empty"}}]}}
 For "visuals" give 10-14 items, roughly one every 3 seconds: the main nouns (companies, products, people, objects, places), in script order, never in the first sentence.
 "query" must describe a concrete, photographable scene, never an abstract idea: for "booking" use "person booking flight on laptop", for "privacy" use "padlock on laptop keyboard", for "settings" use "smartphone settings screen"."""
@@ -759,12 +816,11 @@ def make_short(do_upload):
     stamp = now.strftime("%Y-%m-%d_%H%M")
     work = OUT_DIR / stamp
     work.mkdir(parents=True, exist_ok=True)
-    series = SERIES[now.weekday()]
-    print("Series:", series["name"])
-
     headlines = fetch_headlines()
     if not headlines:
         sys.exit("No new headlines found.")
+    series = pick_series(now, headlines)
+    print("Series:", series["name"])
     meta = clean_meta(write_script(headlines, series), headlines, series["news"])
     if meta["link"]:
         meta = clean_meta(fact_check(meta, headlines), headlines, True)
@@ -784,6 +840,9 @@ def make_short(do_upload):
     print("Rendered:", mp4)
     save_ready_copy(mp4, meta, stamp)
 
+    if meta.get("part2") and series["name"] != "Part 2":
+        PART2.write_text(json.dumps({"date": (now.date() + dt.timedelta(days=1)).isoformat(), "brief": meta["part2"]}), encoding="utf-8")
+        print("Part 2 planned for tomorrow:", meta["part2"])
     if meta["link"]:
         used = json.loads(STATE.read_text()) if STATE.exists() else []
         STATE.write_text(json.dumps(used + [meta["link"]]))
