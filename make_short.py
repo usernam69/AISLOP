@@ -10,7 +10,7 @@ Usage:
     python make_short.py --upload         # render + upload (or hold for review if REVIEW_MODE=1)
     python make_short.py --upload-latest  # upload the newest rendered Short that isn't uploaded yet
 """
-import argparse, asyncio, csv, datetime as dt, html, json, os, random, re, shutil, subprocess, sys, time
+import argparse, asyncio, calendar, csv, datetime as dt, html, json, os, random, re, shutil, subprocess, sys, time
 from pathlib import Path
 
 import edge_tts, feedparser, imageio_ffmpeg
@@ -72,11 +72,13 @@ def notify(title, text):
     """Windows toast notification (best effort)."""
     ps = ("[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null;"
           "$x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
-          "$t = $x.GetElementsByTagName('text'); $t.Item(0).AppendChild($x.CreateTextNode($args[0])) | Out-Null;"
-          "$t.Item(1).AppendChild($x.CreateTextNode($args[1])) | Out-Null;"
+          "$t = $x.GetElementsByTagName('text'); $t.Item(0).AppendChild($x.CreateTextNode($env:TOAST_TITLE)) | Out-Null;"
+          "$t.Item(1).AppendChild($x.CreateTextNode($env:TOAST_TEXT)) | Out-Null;"
           "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('SubtleSpawns').Show([Windows.UI.Notifications.ToastNotification]::new($x))")
     try:
-        subprocess.run(["powershell", "-NoProfile", "-Command", "& {" + ps + "}", title, text[:250]], capture_output=True, timeout=30)
+        # text goes in through environment variables so PowerShell never runs it as code
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, timeout=30,
+                       env=os.environ | {"TOAST_TITLE": title, "TOAST_TEXT": text[:250]})
     except Exception:
         pass
 
@@ -136,7 +138,7 @@ def fetch_headlines(n=10, max_age_h=30):
     for url in FEEDS:
         for e in feedparser.parse(url).entries[:6]:
             published = e.get("published_parsed") or e.get("updated_parsed")
-            if published and now - time.mktime(published) > max_age_h * 3600:
+            if published and now - calendar.timegm(published) > max_age_h * 3600:
                 continue   # stale story
             if e.get("link") not in used and not re.search(r"(?i)\b(elections?|electoral|donat\w*|republicans?|democrats?|trump|senate|congress|box office|movies?)\b", e.title):
                 summary = html.unescape(re.sub("<[^>]+>", "", e.get("summary", ""))).replace("[…]", "")[:400]
@@ -721,7 +723,8 @@ def upload(mp4, meta):
 def upload_latest():
     """Review mode: upload the newest rendered Short that hasn't been uploaded."""
     rows = read_runs()
-    row = next((r for r in reversed(rows) if not r.get("video_id") and (OUT_DIR / r["folder"] / "short.mp4").exists()), None)
+    row = next((r for r in reversed(rows) if not r.get("video_id") and r.get("privacy") in ("review", "pending")
+                and (OUT_DIR / r["folder"] / "short.mp4").exists()), None)
     if not row:
         sys.exit("Nothing waiting for upload.")
     work = OUT_DIR / row["folder"]
@@ -778,11 +781,15 @@ def make_short(do_upload):
     row = {"date": now.date().isoformat(), "time": now.strftime("%H:%M"), "folder": stamp, "title": meta["title"],
            "topic": meta["topic"], "series": series["name"], "link": meta["link"], "video_id": "",
            "images": len(images), "voice": voice_name, "privacy": "", "comment_posted": ""}
+    if do_upload:
+        row["privacy"] = "review" if REVIEW_MODE else "pending"   # render-only test runs stay blank
+    rows = read_runs() + [row]
+    write_runs(rows)   # log before uploading so a failed upload can be retried with --upload-latest
     if do_upload and REVIEW_MODE:
         notify("SubtleSpawns: Short ready for review", f"{meta['title']} - watch it in output\\{stamp}, then run make_short.py --upload-latest")
     elif do_upload:
         row["video_id"], row["privacy"] = upload(mp4, meta), PRIVACY
-    write_runs(read_runs() + [row])
+        write_runs(rows)
 
 
 def main():

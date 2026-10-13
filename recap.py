@@ -16,7 +16,7 @@ def main():
     args = ap.parse_args()
 
     since = (dt.date.today() - dt.timedelta(days=7)).isoformat()
-    rows = [r for r in read_runs() if r["date"] >= since and (OUT_DIR / r["folder"] / "short.mp4").exists()]
+    rows = [r for r in read_runs() if r["date"] >= since and r.get("video_id") and (OUT_DIR / r["folder"] / "short.mp4").exists()]
     if len(rows) < 2:
         sys.exit("Fewer than 2 Shorts this week; no recap.")
     clips = [OUT_DIR / r["folder"] / "short.mp4" for r in rows]
