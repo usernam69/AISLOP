@@ -98,6 +98,22 @@ For "visuals" give 10-14 items, roughly one every 3 seconds: the main nouns (com
                     (OUT_DIR / "last_bad_reply.json").write_text(json.dumps(r.json(), indent=1), encoding="utf-8")
                     print(f"{model} reply unparseable (finish_reason={choice.get('finish_reason')})")
             print(f"{model} failed ({r.status_code}): {r.text[:200]}")
+    if os.getenv("GEMINI_API_KEY"):
+        import httpx
+        # free backup writer; newest models are often overloaded, so try a few
+        for model in ["gemini-flash-latest", "gemini-3-flash-preview", "gemini-3.1-flash-lite"]:
+            try:
+                r = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                               headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, timeout=120,
+                               json={"contents": [{"parts": [{"text": prompt}]}],
+                                     "generationConfig": {"responseMimeType": "application/json"}})
+                r.raise_for_status()
+                text = "".join(p.get("text", "") for p in r.json()["candidates"][0]["content"]["parts"])
+                meta = json.loads(text[text.find("{"): text.rfind("}") + 1])
+                print("Script written by", model)
+                return meta
+            except Exception as e:
+                print(f"{model} failed ({getattr(getattr(e, 'response', None), 'status_code', type(e).__name__)})")
     if not os.getenv("ANTHROPIC_API_KEY"):
         print("No working AI key - using a basic template script.")
         h = headlines[0]
@@ -282,6 +298,16 @@ def fetch_images(visuals, words, work, total):
                     print(f"AI image failed for '{v['word']}' ({e.__class__.__name__}); using photo library")
                     if "402" in str(e):
                         AI_IMAGES_OK[0] = False   # out of credit: don't retry for every word
+            if not pick and os.getenv("PEXELS_API_KEY"):
+                try:
+                    ph = httpx.get("https://api.pexels.com/v1/search", headers={"Authorization": os.environ["PEXELS_API_KEY"]},
+                                   params={"query": v["query"], "per_page": 1, "orientation": "landscape"}, timeout=30
+                                   ).raise_for_status().json()["photos"]
+                    if ph:
+                        pick = {"url": ph[0]["src"]["large"], "credit": f"Photo by {ph[0]['photographer']} on Pexels {ph[0]['url']}"}
+                        print(f"Pexels image for '{v['word']}'")
+                except Exception as e:
+                    print(f"Pexels failed for '{v['word']}' ({type(e).__name__})")
             # Openverse: try the full query, then just the key word, so fewer words end up without a photo
             for q in ([] if pick else dict.fromkeys([v["query"], v["word"]])):
                 res = httpx.get("https://api.openverse.org/v1/images/", headers={"User-Agent": "AISLOP/1.0"}, timeout=30,
