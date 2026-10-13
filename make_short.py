@@ -1,4 +1,4 @@
-"""Daily tech-news Short for @SubtleSpawns.
+﻿"""Daily tech-news Short for @SubtleSpawns.
 
 Pulls tech headlines, writes a script (Claude), voices it (free Edge TTS),
 renders a 1080x1920 Short over a random slice of the parkour footage with
@@ -38,7 +38,7 @@ def fetch_headlines(n=8):
     for url in FEEDS:
         for e in feedparser.parse(url).entries[:6]:
             if e.get("link") not in used and not re.search(r"(?i)\b(elections?|electoral|donat\w*|republicans?|democrats?|trump|senate|congress|box office|movies?)\b", e.title):
-                summary = html.unescape(re.sub("<[^>]+>", "", e.get("summary", ""))).replace("[…]", "")[:400]
+                summary = html.unescape(re.sub("<[^>]+>", "", e.get("summary", ""))).replace("[â€¦]", "")[:400]
                 items.append({"title": html.unescape(e.title), "link": e.link, "summary": summary})
     return items[:n]
 
@@ -58,6 +58,7 @@ def clean_meta(meta, headlines):
     meta.setdefault("description", f"{meta['title']}\nSource: {meta['link']}\n#tech #technews #shorts")
     if not isinstance(meta.get("tags"), list):
         meta["tags"] = ["tech news", "technology", "shorts"]
+    meta["visuals"] = [v for v in meta.get("visuals") or [] if isinstance(v, dict) and v.get("word") and v.get("query")]
     return meta
 
 
@@ -77,7 +78,9 @@ Reply with ONLY JSON:
 {{"link": "...", "hook_card": "3-6 word on-screen hook", "script": "...",
 "title": "under 70 chars, keyword first, ends with #shorts",
 "description": "2-3 keyword-rich sentences, then a source line, then 5 hashtags",
-"tags": ["10-15 search keywords"]}}"""
+"tags": ["10-15 search keywords"],
+"visuals": [{{"word": "one key word copied exactly from the script", "query": "2-4 word photo search for it"}}]}}
+For "visuals" give 4-6 items: the main nouns (companies, products, objects), in script order, never in the first sentence."""
     if os.getenv("OPENROUTER_API_KEY"):
         import httpx
         # paid Claude first; free model if the account has no credits
@@ -185,6 +188,36 @@ def tts_elevenlabs(text, mp3):
     return words
 
 
+def norm(w):
+    return re.sub(r"\W", "", w.lower())
+
+
+def fetch_images(visuals, words, work, total):
+    """Free Creative Commons photos (Openverse) shown for 2s when their word is spoken."""
+    import httpx
+    shown, last_end = [], 3.4          # stay clear of the opening hook card
+    for n, v in enumerate(visuals):
+        target = norm(v["word"].split()[0])
+        t = next((s for s, _, w in words if norm(w) == target and s >= last_end), None)
+        if t is None or t + 1 > total:
+            continue
+        try:
+            res = httpx.get("https://api.openverse.org/v1/images/", headers={"User-Agent": "AISLOP/1.0"}, timeout=30,
+                            params={"q": v["query"], "license_type": "commercial", "page_size": 5}).json()["results"]
+            pick = next(r for r in res if r["url"].lower().split("?")[0].endswith((".jpg", ".jpeg", ".png")))
+            img = work / f"img{n}{Path(pick['url'].split('?')[0]).suffix.lower()}"
+            img.write_bytes(httpx.get(pick["url"], headers={"User-Agent": "AISLOP/1.0"}, timeout=30, follow_redirects=True).raise_for_status().content)
+        except Exception as e:
+            print(f"No image for '{v['word']}' ({type(e).__name__})")
+            continue
+        end = min(t + 2.0, total)
+        credit = f"\"{pick.get('title') or 'Photo'}\" by {pick.get('creator') or 'unknown'} ({pick['license'].upper()} {pick.get('license_version') or ''}) {pick.get('foreign_landing_url') or pick['url']}"
+        shown.append((img, t, end, credit))
+        last_end = end + 0.3
+    print(f"Images: {len(shown)}")
+    return shown
+
+
 def ass_time(t):
     t = round(t, 2)  # round first so 59.996 can't print as "60.00"
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
@@ -225,17 +258,26 @@ def bg_duration():
     return int(h) * 3600 + int(m) * 60 + float(s)
 
 
-def render(voice_mp3, subs, total, out_mp4):
+def render(voice_mp3, subs, total, out_mp4, images=()):
     start = random.uniform(30, bg_duration() - total - 30)
     music = sorted(MUSIC_DIR.glob("*.mp3")) if MUSIC_DIR.exists() else []
     cmd = [FFMPEG, "-y", "-ss", f"{start:.1f}", "-t", f"{total:.2f}", "-i", str(BG_VIDEO), "-i", str(voice_mp3)]
     vf = ("[0:v]crop=ih*9/16:ih,scale=1080:1920,eq=brightness=-0.06:saturation=1.15,"
           # slow push-in keeps the frame moving
-          f"zoompan=z='min(1+0.0006*on,1.15)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=1080x1920:fps=30,"
-          f"ass={subs.name}[v]")
+          f"zoompan=z='min(1+0.0006*on,1.15)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=1080x1920:fps=30"
+          "[bg]")
+    last = "bg"
+    for k, (img, s0, e0, _) in enumerate(images):
+        cmd += ["-loop", "1", "-t", f"{total:.2f}", "-i", str(img)]
+        # framed photo in the upper half, fades in/out, above the captions
+        vf += (f";[{2 + k}:v]scale=820:520:force_original_aspect_ratio=decrease,pad=iw+20:ih+20:10:10:white,"
+               f"format=rgba,fade=in:st={s0:.2f}:d=0.15:alpha=1,fade=out:st={e0 - 0.15:.2f}:d=0.15:alpha=1[i{k}]"
+               f";[{last}][i{k}]overlay=x=(W-w)/2:y=290:enable='between(t,{s0:.2f},{e0:.2f})'[o{k}]")
+        last = f"o{k}"
+    vf += f";[{last}]ass={subs.name}[v]"
     if music:
         cmd += ["-stream_loop", "-1", "-i", str(random.choice(music))]
-        af = "[2:a]volume=0.12[m];[1:a][m]amix=inputs=2:duration=first:normalize=0[a]"
+        af = f"[{2 + len(images)}:a]volume=0.12[m];[1:a][m]amix=inputs=2:duration=first:normalize=0[a]"
     else:
         af = "[1:a]anull[a]"
     cmd += ["-filter_complex", vf + ";" + af, "-map", "[v]", "-map", "[a]",
@@ -307,7 +349,11 @@ def main():
     total = min(words[-1][1] + 0.8, 59.0)
     make_subs(words, meta["hook_card"], work / "subs.ass", total)
     mp4 = work / "short.mp4"
-    render(voice, work / "subs.ass", total, mp4)
+    images = fetch_images(meta["visuals"], words, work, total)
+    if images:
+        meta["description"] += "\n\nImages:\n" + "\n".join(c for *_, c in images)
+        (work / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    render(voice, work / "subs.ass", total, mp4, images)
     print("Rendered:", mp4)
 
     used = json.loads(STATE.read_text()) if STATE.exists() else []
