@@ -627,9 +627,10 @@ def render(voice_mp3, subs, total, out_mp4, images=(), mood="upbeat"):
     if not bgs:
         raise FileNotFoundError(f"No background video: set BG_VIDEO or put .mp4 clips in {BG_DIR}")
     bg = random.choice(bgs)
-    start = random.uniform(5, max(5.0, media_duration(bg) - total - 5))
-    cmd = [FFMPEG, "-y", "-ss", f"{start:.1f}", "-t", f"{total:.2f}", "-i", str(bg), "-i", str(voice_mp3)]
-    vf = ("[0:v]crop=ih*9/16:ih,scale=1080:1920,eq=brightness=-0.06:saturation=1.15,"
+    speed = float(os.getenv("BG_SPEED", "1.5"))   # play the gameplay faster than real time
+    start = random.uniform(5, max(5.0, media_duration(bg) - total * speed - 5))
+    cmd = [FFMPEG, "-y", "-ss", f"{start:.1f}", "-t", f"{total * speed:.2f}", "-i", str(bg), "-i", str(voice_mp3)]
+    vf = (f"[0:v]setpts=PTS/{speed},crop=ih*9/16:ih,scale=1080:1920,eq=brightness=-0.06:saturation=1.15,"
           # slow push-in keeps the frame moving
           "zoompan=z='min(1+0.0006*on,1.15)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=1080x1920:fps=30[bg]")
     last = "bg"
