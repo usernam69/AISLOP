@@ -142,6 +142,31 @@ def tts_windows(text, wav):
     return words
 
 
+def tts_elevenlabs(text, mp3):
+    """ElevenLabs voice; word timings rebuilt from its per-character alignment."""
+    import base64, httpx
+    r = httpx.post(f"https://api.elevenlabs.io/v1/text-to-speech/{os.environ['ELEVENLABS_VOICE_ID']}/with-timestamps",
+                   headers={"xi-api-key": os.environ["ELEVENLABS_API_KEY"]}, timeout=180,
+                   json={"text": text, "model_id": os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")})
+    r.raise_for_status()
+    d = r.json()
+    mp3.write_bytes(base64.b64decode(d["audio_base64"]))
+    a = d["alignment"]
+    words, cur, start = [], "", None
+    for ch, s0, e0 in zip(a["characters"], a["character_start_times_seconds"], a["character_end_times_seconds"]):
+        if ch.isspace():
+            if cur:
+                words.append((start, end, cur))
+            cur, start = "", None
+        else:
+            if start is None:
+                start = s0
+            cur, end = cur + ch, e0
+    if cur:
+        words.append((start, end, cur))
+    return words
+
+
 def ass_time(t):
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
 
@@ -242,7 +267,15 @@ def main():
 
     voice = work / "voice.mp3"
     try:
-        words = asyncio.run(tts(meta["script"], voice))
+        if os.getenv("ELEVENLABS_API_KEY") and os.getenv("ELEVENLABS_VOICE_ID"):
+            try:
+                words = tts_elevenlabs(meta["script"], voice)
+                print("Voice: ElevenLabs")
+            except Exception as e:
+                print(f"ElevenLabs failed ({e}); trying free voice.")
+                words = asyncio.run(tts(meta["script"], voice))
+        else:
+            words = asyncio.run(tts(meta["script"], voice))
     except Exception as e:
         print(f"Edge voice unavailable ({type(e).__name__}); using built-in Windows voice.")
         voice = work / "voice.wav"
