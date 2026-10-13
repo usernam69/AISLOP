@@ -85,7 +85,7 @@ def draft_replies(yt, stats):
         for t in threads.get("items", []):
             c = t["snippet"]["topLevelComment"]["snippet"]
             if t["snippet"]["totalReplyCount"] == 0 and c.get("authorChannelId", {}).get("value") != me:
-                todo.append({"video": s["title"], "author": c["authorDisplayName"], "comment": c["textOriginal"][:300],
+                todo.append({"video": s["title"], "author": c["authorDisplayName"], "comment": " ".join(c["textOriginal"].split())[:300],
                              "link": f"https://youtube.com/shorts/{s['video_id']}"})
     if not todo:
         print("\nNo new comments to reply to.")

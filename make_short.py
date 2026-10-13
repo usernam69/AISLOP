@@ -91,6 +91,9 @@ def read_runs():
 
 
 def write_runs(rows):
+    # merge with what's on disk so a run that started earlier (e.g. an app upload during the daily run) doesn't drop rows
+    mine = {r["folder"] for r in rows}
+    rows = sorted([r for r in read_runs() if r["folder"] not in mine] + list(rows), key=lambda r: r["folder"])
     with open(RUNS, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=RUN_FIELDS, extrasaction="ignore")
         w.writeheader()
@@ -619,7 +622,10 @@ def pick_music(mood):
 
 
 def render(voice_mp3, subs, total, out_mp4, images=(), mood="upbeat"):
-    bgs = [BG_VIDEO] + (sorted(BG_DIR.glob("*.mp4")) if BG_DIR.exists() else [])
+    # the cloud run only has the short clips in backgrounds/, not the 6-hour file
+    bgs = [p for p in [BG_VIDEO] + (sorted(BG_DIR.glob("*.mp4")) if BG_DIR.exists() else []) if p.exists()]
+    if not bgs:
+        raise FileNotFoundError(f"No background video: set BG_VIDEO or put .mp4 clips in {BG_DIR}")
     bg = random.choice(bgs)
     start = random.uniform(5, max(5.0, media_duration(bg) - total - 5))
     cmd = [FFMPEG, "-y", "-ss", f"{start:.1f}", "-t", f"{total:.2f}", "-i", str(bg), "-i", str(voice_mp3)]
@@ -684,6 +690,8 @@ def get_youtube():
             creds.refresh(Request())
         except RefreshError as e:
             # Testing-mode apps lose their login after 7 days; sign in again
+            if os.getenv("CI"):   # GitHub Actions can't open a browser; a fresh token.json secret is needed
+                raise RuntimeError(f"YouTube sign-in expired ({e}). Sign in on your PC, then update the TOKEN_JSON secret.")
             print(f"YouTube sign-in needed ({e}); opening browser.")
             creds = InstalledAppFlow.from_client_secrets_file(HERE / "client_secret.json", SCOPES).run_local_server(port=0)
             TOKEN_ISSUED.write_text(dt.date.today().isoformat())

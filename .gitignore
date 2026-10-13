@@ -2,15 +2,11 @@
 client_secret.json
 token.json
 output/
-used_headlines.json
 __pycache__/
 *.mp4
 music/
 ready_to_post/
-backgrounds/
 assets/
-runs.csv
-stats.csv
-replies.md
 token_issued.txt
 output/app_job.log
+!backgrounds/*.mp4

@@ -1,0 +1,8 @@
+edge-tts
+feedparser
+imageio-ffmpeg
+python-dotenv
+httpx
+google-api-python-client
+google-auth-oauthlib
+flask

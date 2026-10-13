@@ -165,7 +165,7 @@ async function loadRuns() {
   $("#cards").innerHTML = runs.length ? runs.map(r => {
     const [cls, label] = status(r);
     return `<article class="card">
-      ${r.has_video ? `<video src="/video/${esc(r.folder)}#t=1.5" controls preload="metadata"></video>` : `<div class="noclip">Video cleaned up</div>`}
+      ${r.video_id ? "" : r.has_video ? `<video src="/video/${esc(r.folder)}#t=1.5" controls preload="metadata"></video>` : `<div class="noclip">Video cleaned up</div>`}
       <div class="body">
         <h3>${esc(clean(r.title))}</h3>
         <div class="meta">${esc(r.date)} ${esc(r.time)} · ${esc(r.series)} · ${esc(r.topic)}</div>
@@ -177,21 +177,23 @@ async function loadRuns() {
         </div>
       </div></article>`;
   }).join("") : `<div class="empty">No Shorts yet. Click “Make a test Short”.</div>`;
-  document.querySelectorAll("[data-upload]").forEach(b => b.onclick = () => {
-    if (confirm(`Upload “${b.closest(".card").querySelector("h3").textContent}” to YouTube?`)) startJob("upload", b.dataset.upload);
-  });
+  document.querySelectorAll("[data-upload]").forEach(b => b.onclick = () => confirmClick(b, "Click again to upload", () => startJob("upload", b.dataset.upload)));
 }
 
 // ---------- jobs ----------
 const JOB_NAMES = {make: "Making a test Short", make_upload: "Making and uploading a Short", stats: "Refreshing stats",
                    recap: "Building weekly recap", upload: "Uploading"};
-document.querySelectorAll("[data-job]").forEach(b => b.onclick = () => {
-  if (b.dataset.job === "make_upload" && !confirm("Make a new Short and upload it to your channel?")) return;
-  startJob(b.dataset.job);
-});
+// two-click confirm inside the page (browser confirm() pop-ups can be blocked, which silently cancelled uploads)
+function confirmClick(b, prompt, go) {
+  if (b.dataset.armed) { clearTimeout(+b.dataset.armed); delete b.dataset.armed; b.textContent = b.dataset.label; go(); return; }
+  b.dataset.label = b.textContent; b.textContent = prompt;
+  b.dataset.armed = setTimeout(() => { delete b.dataset.armed; b.textContent = b.dataset.label; }, 5000);
+}
+document.querySelectorAll("[data-job]").forEach(b => b.onclick = () =>
+  b.dataset.job === "make_upload" ? confirmClick(b, "Click again to make & upload", () => startJob("make_upload")) : startJob(b.dataset.job));
 async function startJob(kind, folder) {
   const r = await fetch("/api/job", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({kind, folder})});
-  if (!r.ok) { alert((await r.json().catch(() => ({}))).error || "Couldn't start that."); return; }
+  if (!r.ok) { $("#job").hidden = false; $("#jobTitle").textContent = (await r.json().catch(() => ({}))).error || "Couldn't start that."; return; }
   pollJob();
 }
 let polling = null;

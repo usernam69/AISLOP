@@ -1,0 +1,109 @@
+# Makes and uploads the daily Short in the cloud, so your PC can be off.
+# Secrets needed (repo Settings > Secrets and variables > Actions):
+#   ENV_FILE            - the whole contents of your .env file
+#   CLIENT_SECRET_JSON  - the whole contents of client_secret.json
+#   TOKEN_JSON          - the whole contents of token.json
+name: Daily Short
+
+on:
+  schedule:
+    # GitHub cron is UTC. 19:00 UTC = 3 PM New York in summer, 20:00 UTC = 3 PM in winter;
+    # the "Is it time?" step skips whichever one isn't 3 PM.
+    - cron: "0 19 * * *"
+    - cron: "0 20 * * *"
+  workflow_dispatch:   # "Run workflow" button for a manual run
+
+concurrency: daily-short
+
+permissions:
+  contents: write   # to save runs.csv etc. back to the repo
+
+env:
+  TZ: America/New_York
+  CI: "1"
+  YT_APP_PUBLISHED: "1"
+  PYTHONIOENCODING: utf-8
+
+jobs:
+  short:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Is it time?
+        id: when
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import csv, datetime as dt, os
+          now = dt.datetime.now()
+          done = any(r["date"] == now.date().isoformat() and r.get("video_id")
+                     for r in csv.DictReader(open("runs.csv", encoding="utf-8"))) if os.path.exists("runs.csv") else False
+          manual = os.environ["GITHUB_EVENT_NAME"] == "workflow_dispatch"
+          print("go=" + ("yes" if manual or (now.hour >= 15 and not done) else "no"))
+          EOF
+
+      - uses: actions/setup-python@v5
+        if: steps.when.outputs.go == 'yes'
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install
+        if: steps.when.outputs.go == 'yes'
+        run: |
+          pip install -r requirements.txt
+          # Arial Black for the captions
+          echo "ttf-mscorefonts-installer msttcorefonts/accept-mscorefonts-eula select true" | sudo debconf-set-selections
+          sudo apt-get update -qq && sudo apt-get install -y -qq ttf-mscorefonts-installer > /dev/null
+
+      - name: Restore recent Shorts (for comments and the weekly recap)
+        if: steps.when.outputs.go == 'yes'
+        uses: actions/cache/restore@v4
+        with:
+          path: output
+          key: output-${{ github.run_id }}
+          restore-keys: output-
+
+      - name: Write secrets to files
+        if: steps.when.outputs.go == 'yes'
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+          CLIENT_SECRET_JSON: ${{ secrets.CLIENT_SECRET_JSON }}
+          TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
+        run: |
+          printf '%s\n' "$ENV_FILE" > .env
+          printf '%s' "$CLIENT_SECRET_JSON" > client_secret.json
+          printf '%s' "$TOKEN_JSON" > token.json
+
+      - name: Make and upload the Short
+        if: steps.when.outputs.go == 'yes'
+        run: python -u make_short.py --upload
+
+      - name: Stats, first comment, reply drafts
+        if: steps.when.outputs.go == 'yes' && !cancelled()
+        continue-on-error: true
+        run: python -u stats.py
+
+      - name: Weekly recap (Sundays)
+        if: steps.when.outputs.go == 'yes' && success() && github.event_name == 'schedule'
+        continue-on-error: true
+        run: |
+          if [ "$(date +%u)" = "7" ]; then python -u recap.py --upload; fi
+
+      - name: Save the log back to the repo
+        if: steps.when.outputs.go == 'yes' && !cancelled()
+        run: |
+          git config user.name "SubtleSpawns bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for f in runs.csv used_headlines.json stats.csv replies.md; do if [ -f "$f" ]; then git add "$f"; fi; done
+          git diff --cached --quiet && exit 0
+          git commit -m "Daily Short $(date +%F)"
+          for i in 1 2 3; do git pull --rebase -q && git push -q && break; sleep 5; done
+
+      - name: Keep recent Shorts for tomorrow
+        if: steps.when.outputs.go == 'yes' && !cancelled()
+        uses: actions/cache/save@v4
+        with:
+          path: output
+          key: output-${{ github.run_id }}

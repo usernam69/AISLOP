@@ -18,7 +18,8 @@ def main():
     since = (dt.date.today() - dt.timedelta(days=7)).isoformat()
     rows = [r for r in read_runs() if r["date"] >= since and r.get("video_id") and (OUT_DIR / r["folder"] / "short.mp4").exists()]
     if len(rows) < 2:
-        sys.exit("Fewer than 2 Shorts this week; no recap.")
+        print(f"Only {len(rows)} uploaded Short(s) in the last 7 days; a recap needs at least 2. Nothing to do yet.")
+        return
     clips = [OUT_DIR / r["folder"] / "short.mp4" for r in rows]
     out = OUT_DIR / f"recap_{dt.date.today().isoformat()}.mp4"
     cmd = [FFMPEG, "-y"]

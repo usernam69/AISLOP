@@ -2,7 +2,7 @@
 
 Run:  python app.py   then open http://127.0.0.1:5055  (only reachable from this PC)
 """
-import csv, json, re, subprocess, sys, threading
+import csv, json, os, re, subprocess, sys, threading
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, request, send_file
@@ -68,7 +68,7 @@ def job_status():
         code = None if running or job["proc"] is None else job["proc"].returncode
     log = JOB_LOG.read_text(encoding="utf-8", errors="replace")[-6000:] if JOB_LOG.exists() else ""
     # hide ffmpeg's noisy encoder lines
-    log = "\n".join(l for l in log.splitlines() if not re.match(r"\s*(\[|frame=|Input #|Output #|Stream|Metadata|Duration)", l))
+    log = "\n".join(l for l in log.splitlines() if not re.match(r"\s*(\[|frame=|Input #|Output #|Stream|Metadata|Duration|Last message repeated|.*pixel format used)", l))
     return jsonify({"running": running, "kind": job["kind"], "exit_code": code, "log": log})
 
 
@@ -88,8 +88,9 @@ def start_job():
         if job["proc"] is not None and job["proc"].poll() is None:
             return jsonify({"error": "Another job is still running."}), 409
         OUT_DIR.mkdir(exist_ok=True)
-        log = open(JOB_LOG, "w", encoding="utf-8")
-        job["proc"] = subprocess.Popen([sys.executable, "-u", *args], cwd=HERE, stdout=log, stderr=subprocess.STDOUT)
+        with open(JOB_LOG, "w", encoding="utf-8") as log:  # the child keeps its own copy of the handle
+            job["proc"] = subprocess.Popen([sys.executable, "-u", *args], cwd=HERE, stdout=log, stderr=subprocess.STDOUT,
+                                           env=os.environ | {"PYTHONIOENCODING": "utf-8"})
         job["kind"] = kind
     return jsonify({"started": kind})
 
