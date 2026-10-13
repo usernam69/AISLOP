@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SubtleSpawns Studio</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb; --surface-2: #f0efec;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --accent: #2a78d6; --accent-ink: #ffffff;
+  --good: #0ca30c; --good-text: #006300; --warning: #fab219; --critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #232321;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --accent: #3987e5; --good-text: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #232321;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --accent: #3987e5; --good-text: #0ca30c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text-primary);
+       font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 20px;
+         background: var(--surface-1); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 18px; margin: 0; }
+nav { display: flex; gap: 4px; }
+nav button { background: none; border: 0; padding: 8px 12px; border-radius: 8px; color: var(--text-secondary);
+             font: inherit; cursor: pointer; }
+nav button[aria-selected="true"] { background: var(--surface-2); color: var(--text-primary); font-weight: 600; }
+.spacer { flex: 1; }
+.btn { font: inherit; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+       padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn:disabled { opacity: .5; cursor: default; }
+main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
+section[hidden] { display: none; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+.job { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+       margin-bottom: 18px; }
+.job pre { margin: 8px 0 0; max-height: 220px; overflow: auto; font: 12px/1.4 ui-monospace, Consolas, monospace;
+           color: var(--text-secondary); white-space: pre-wrap; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+        display: flex; flex-direction: column; }
+.card video { width: 100%; aspect-ratio: 9/16; background: #000; display: block; }
+.card .noclip { aspect-ratio: 9/16; display: grid; place-items: center; color: var(--muted); background: var(--surface-2); }
+.card .body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.card h3 { font-size: 14px; margin: 0; }
+.meta { color: var(--text-secondary); font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 8px; border-radius: 99px;
+        background: var(--surface-2); color: var(--text-secondary); width: fit-content; }
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.pill.public i { background: var(--good); } .pill.private i { background: var(--warning); }
+.pill.pending i { background: var(--critical); }
+.card .actions { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; }
+.card a { color: var(--accent); font-size: 13px; }
+details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+details p { white-space: pre-wrap; font-size: 13px; color: var(--text-secondary); margin: 6px 0 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.tile .label { color: var(--text-secondary); font-size: 13px; }
+.tile .value { font-size: 30px; font-weight: 650; margin-top: 2px; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.chart { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; position: relative; }
+.chart h2 { font-size: 15px; margin: 0 0 2px; }
+.chart .sub { color: var(--text-secondary); font-size: 13px; margin-bottom: 8px; }
+.chart svg { width: 100%; display: block; overflow: visible; }
+.chart table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.chart td, .chart th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid); }
+.chart td:last-child, .chart th:last-child { text-align: right; }
+.empty { color: var(--muted); padding: 28px 0; text-align: center; }
+.tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary);
+       border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; font-size: 13px;
+       box-shadow: 0 4px 14px rgba(0,0,0,.15); display: none; z-index: 20; max-width: 280px; }
+.tip b { display: block; }
+.replies { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.replies blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--axis); color: var(--text-secondary); }
+.replies .item { padding: 10px 0; border-bottom: 1px solid var(--grid); }
+@media (max-width: 600px) { header { padding: 12px 16px; } .tile .value { font-size: 24px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>SubtleSpawns Studio</h1>
+  <nav role="tablist">
+    <button role="tab" data-tab="shorts" aria-selected="true">Shorts</button>
+    <button role="tab" data-tab="analytics" aria-selected="false">Analytics</button>
+    <button role="tab" data-tab="replies" aria-selected="false">Reply drafts</button>
+  </nav>
+  <div class="spacer"></div>
+  <button class="btn" id="theme" title="Toggle dark mode" aria-label="Toggle dark mode">◐</button>
+</header>
+<main>
+  <div class="toolbar">
+    <button class="btn primary" data-job="make_upload">Make &amp; upload a Short</button>
+    <button class="btn" data-job="make">Make a test Short</button>
+    <button class="btn" data-job="stats">Refresh stats</button>
+    <button class="btn" data-job="recap">Build weekly recap</button>
+  </div>
+  <div class="job" id="job" hidden>
+    <strong id="jobTitle"></strong>
+    <pre id="jobLog"></pre>
+  </div>
+
+  <section id="shorts"><div class="grid" id="cards"></div></section>
+
+  <section id="analytics" hidden>
+    <div class="tiles" id="tiles"></div>
+    <div class="charts">
+      <div class="chart" id="c-shorts"></div>
+      <div class="chart" id="c-topic"></div>
+      <div class="chart" id="c-series"></div>
+      <div class="chart" id="c-hour"></div>
+    </div>
+  </section>
+
+  <section id="replies" hidden><div class="replies" id="replyBox"></div></section>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = n => Number(n).toLocaleString();
+const clean = t => String(t || "").replace(/\s*#shorts\s*/i, "");
+
+// theme toggle (remembered per browser)
+try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+$("#theme").onclick = () => {
+  const dark = getComputedStyle(document.documentElement).colorScheme.includes("dark");
+  document.documentElement.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("theme", document.documentElement.dataset.theme); } catch {}
+};
+
+// tabs
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll("main section").forEach(s => s.hidden = s.id !== b.dataset.tab);
+  if (b.dataset.tab === "analytics") loadStats();
+  if (b.dataset.tab === "replies") loadReplies();
+});
+
+// ---------- Shorts ----------
+function status(r) {
+  if (r.video_id) return r.privacy === "public" ? ["public", "Public"] : ["private", r.privacy ? cap(r.privacy) : "Uploaded"];
+  if (r.privacy === "pending" || r.privacy === "review") return ["pending", r.privacy === "review" ? "Waiting for review" : "Upload failed"];
+  return ["", "Test render"];
+}
+const cap = s => s[0].toUpperCase() + s.slice(1);
+
+async function loadRuns() {
+  const runs = await (await fetch("/api/runs")).json();
+  $("#cards").innerHTML = runs.length ? runs.map(r => {
+    const [cls, label] = status(r);
+    return `<article class="card">
+      ${r.has_video ? `<video src="/video/${esc(r.folder)}#t=1.5" controls preload="metadata"></video>` : `<div class="noclip">Video cleaned up</div>`}
+      <div class="body">
+        <h3>${esc(clean(r.title))}</h3>
+        <div class="meta">${esc(r.date)} ${esc(r.time)} · ${esc(r.series)} · ${esc(r.topic)}</div>
+        <span class="pill ${cls}"><i></i>${esc(label)}</span>
+        <details><summary>Script &amp; description</summary><p>${esc(r.script)}</p><p>${esc(r.description)}</p></details>
+        <div class="actions">
+          ${r.video_id ? `<a href="https://youtube.com/shorts/${esc(r.video_id)}" target="_blank" rel="noopener">Open on YouTube ↗</a>`
+                       : (r.has_video ? `<button class="btn" data-upload="${esc(r.folder)}">Upload to YouTube</button>` : "")}
+        </div>
+      </div></article>`;
+  }).join("") : `<div class="empty">No Shorts yet. Click “Make a test Short”.</div>`;
+  document.querySelectorAll("[data-upload]").forEach(b => b.onclick = () => {
+    if (confirm(`Upload “${b.closest(".card").querySelector("h3").textContent}” to YouTube?`)) startJob("upload", b.dataset.upload);
+  });
+}
+
+// ---------- jobs ----------
+const JOB_NAMES = {make: "Making a test Short", make_upload: "Making and uploading a Short", stats: "Refreshing stats",
+                   recap: "Building weekly recap", upload: "Uploading"};
+document.querySelectorAll("[data-job]").forEach(b => b.onclick = () => {
+  if (b.dataset.job === "make_upload" && !confirm("Make a new Short and upload it to your channel?")) return;
+  startJob(b.dataset.job);
+});
+async function startJob(kind, folder) {
+  const r = await fetch("/api/job", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({kind, folder})});
+  if (!r.ok) { alert((await r.json().catch(() => ({}))).error || "Couldn't start that."); return; }
+  pollJob();
+}
+let polling = null;
+async function pollJob() {
+  const j = await (await fetch("/api/job")).json();
+  if (!j.kind) return;
+  $("#job").hidden = false;
+  $("#jobTitle").textContent = (JOB_NAMES[j.kind] || j.kind) +
+    (j.running ? " …" : j.exit_code === 0 ? " — done ✓" : ` — failed (exit ${j.exit_code})`);
+  const pre = $("#jobLog"); pre.textContent = j.log; pre.scrollTop = pre.scrollHeight;
+  document.querySelectorAll("[data-job],[data-upload]").forEach(b => b.disabled = j.running);
+  clearTimeout(polling);
+  if (j.running) polling = setTimeout(pollJob, 1500);
+  else { loadRuns(); if (!$("#analytics").hidden) loadStats(); }
+}
+
+// ---------- analytics ----------
+const tip = $("#tip");
+function showTip(e, html) { tip.innerHTML = html; tip.style.display = "block";
+  tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px"; tip.style.top = (e.clientY + 14) + "px"; }
+const hideTip = () => tip.style.display = "none";
+
+// horizontal bar chart: one series, so one colour and no legend; table view below for accessibility
+function barChart(el, title, sub, rows, valueLabel) {
+  if (!rows.length) { el.innerHTML = `<h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div><div class="empty">No public Shorts yet.</div>`; return; }
+  const max = Math.max(...rows.map(r => r.value), 1), rowH = 30, W = Math.max(el.clientWidth - 32, 280), labelW = Math.min(150, W * 0.38), H = rows.length * rowH + 24;
+  const ticks = [0, .25, .5, .75, 1].map(f => f * max);
+  const x = v => labelW + (W - labelW - 50) * v / max;
+  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">
+    ${ticks.map(t => `<line x1="${x(t)}" x2="${x(t)}" y1="0" y2="${H - 22}" stroke="var(--grid)" stroke-width="1"/>
+      <text x="${x(t)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${fmt(Math.round(t))}</text>`).join("")}
+    <line x1="${labelW}" x2="${labelW}" y1="0" y2="${H - 22}" stroke="var(--axis)"/>
+    ${rows.map((r, i) => { const y = i * rowH + 6, w = Math.max(x(r.value) - labelW, 2);
+      return `<g class="hit" data-i="${i}">
+        <rect x="0" y="${y - 3}" width="${W}" height="${rowH}" fill="transparent"/>
+        <text x="${labelW - 8}" y="${y + 13}" text-anchor="end" font-size="12" fill="var(--text-secondary)">${esc(r.label.length > 22 ? r.label.slice(0, 21) + "…" : r.label)}</text>
+        <path d="M${labelW},${y} h${w - 4} a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-${w - 4} z" fill="var(--series-1)"/>
+        <text x="${labelW + w + 6}" y="${y + 13}" font-size="12" fill="var(--text-primary)">${fmt(Math.round(r.value))}</text></g>`; }).join("")}
+  </svg>`;
+  el.innerHTML = `<h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div>${svg}
+    <details><summary>Show as table</summary><table><tr><th>${esc(valueLabel[0])}</th><th>${esc(valueLabel[1])}</th></tr>
+    ${rows.map(r => `<tr><td>${esc(r.label)}</td><td>${fmt(Math.round(r.value))}${r.n ? ` (${r.n})` : ""}</td></tr>`).join("")}</table></details>`;
+  el.querySelectorAll(".hit").forEach(g => {
+    const r = rows[g.dataset.i];
+    g.onmousemove = e => showTip(e, `<b>${esc(r.label)}</b>${fmt(Math.round(r.value))} ${esc(valueLabel[1].toLowerCase())}${r.n ? ` · ${r.n} Short${r.n > 1 ? "s" : ""}` : ""}`);
+    g.onmouseleave = hideTip;
+  });
+}
+
+function avgBy(list, key) {
+  const g = {};
+  list.forEach(s => { const k = key(s); (g[k] ||= []).push(+s.views); });
+  return Object.entries(g).map(([label, v]) => ({label, value: v.reduce((a, b) => a + b, 0) / v.length, n: v.length}))
+    .sort((a, b) => b.value - a.value);
+}
+
+async function loadStats() {
+  const stats = await (await fetch("/api/stats")).json();
+  const pub = stats.filter(s => s.privacy === "public");
+  const total = stats.reduce((a, s) => a + +s.views, 0);
+  const tiles = [["Shorts tracked", stats.length], ["Public", pub.length], ["Total views", total],
+                 ["Avg views per public Short", pub.length ? Math.round(pub.reduce((a, s) => a + +s.views, 0) / pub.length) : "–"],
+                 ["Total likes", stats.reduce((a, s) => a + +s.likes, 0)]];
+  $("#tiles").innerHTML = tiles.map(([l, v]) => `<div class="tile"><div class="label">${l}</div><div class="value">${typeof v === "number" ? fmt(v) : v}</div></div>`).join("");
+  barChart($("#c-shorts"), "Views per Short", "Most recent 12 public Shorts",
+           pub.slice(-12).reverse().map(s => ({label: `${s.date.slice(5)} ${clean(s.title)}`, value: +s.views})), ["Short", "Views"]);
+  barChart($("#c-topic"), "Average views by topic", "Which subjects your audience watches most", avgBy(pub, s => s.topic), ["Topic", "Avg views"]);
+  barChart($("#c-series"), "Average views by series", "Which weekday theme performs best", avgBy(pub, s => s.series), ["Series", "Avg views"]);
+  barChart($("#c-hour"), "Average views by upload hour", "When to post", avgBy(pub, s => s.time.slice(0, 2) + ":00"), ["Hour", "Avg views"]);
+}
+
+// ---------- replies ----------
+async function loadReplies() {
+  const {text} = await (await fetch("/api/replies")).json();
+  const items = text.split(/\n(?=\*\*)/).filter(b => b.startsWith("**"));
+  $("#replyBox").innerHTML = items.length ? `<p class="meta">Drafts written by the daily stats run. Copy the ones you like and post them on YouTube.</p>` +
+    items.map(b => {
+      const m = b.match(/^\*\*(.+?)\*\* on \[(.+?)\]\((.+?)\):\n> (.*?)\n\nDraft: ([\s\S]*)$/);
+      return m ? `<div class="item"><strong>${esc(m[1])}</strong> on <a href="${esc(m[3])}" target="_blank" rel="noopener">${esc(clean(m[2]))}</a>
+        <blockquote>${esc(m[4])}</blockquote><div>${esc(m[5].trim())}</div>
+        <button class="btn" style="margin-top:6px" onclick="navigator.clipboard.writeText(${esc(JSON.stringify(m[5].trim()))})">Copy reply</button></div>` : "";
+    }).join("") : `<div class="empty">No reply drafts yet. They appear after viewers comment and the daily stats run.</div>`;
+}
+
+loadRuns(); pollJob();
+</script>
+</body>
+</html>

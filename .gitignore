@@ -13,3 +13,4 @@ runs.csv
 stats.csv
 replies.md
 token_issued.txt
+output/app_job.log

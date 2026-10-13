@@ -720,11 +720,11 @@ def upload(mp4, meta):
     return res["id"]
 
 
-def upload_latest():
-    """Review mode: upload the newest rendered Short that hasn't been uploaded."""
+def upload_latest(folder=None):
+    """Review mode: upload the newest rendered Short that hasn't been uploaded (or a specific folder)."""
     rows = read_runs()
-    row = next((r for r in reversed(rows) if not r.get("video_id") and r.get("privacy") in ("review", "pending")
-                and (OUT_DIR / r["folder"] / "short.mp4").exists()), None)
+    row = next((r for r in reversed(rows) if not r.get("video_id") and (OUT_DIR / r["folder"] / "short.mp4").exists()
+                and (r["folder"] == folder if folder else r.get("privacy") in ("review", "pending"))), None)
     if not row:
         sys.exit("Nothing waiting for upload.")
     work = OUT_DIR / row["folder"]
@@ -796,9 +796,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--upload", action="store_true")
     ap.add_argument("--upload-latest", action="store_true")
+    ap.add_argument("--upload-folder", help="upload this output folder's Short")
     args = ap.parse_args()
     try:
-        upload_latest() if args.upload_latest else make_short(args.upload)
+        if args.upload_folder or args.upload_latest:
+            upload_latest(args.upload_folder)
+        else:
+            make_short(args.upload)
     except SystemExit:
         raise
     except Exception as e:
