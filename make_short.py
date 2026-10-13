@@ -222,14 +222,31 @@ AI_IMAGES_OK = [True]
 IMAGE_MODEL = os.getenv("IMAGE_MODEL", "google/gemini-3.1-flash-lite-image")
 
 
+GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
+IMAGE_PROMPT = "Photorealistic editorial tech-news image, vivid lighting, no text, no logos, no watermarks: "
+
+
 def ai_image(query, path):
-    """AI-generated picture for generic words (no logos or text), via OpenRouter."""
+    """AI-generated picture for generic words (no logos or text): Gemini API first, then OpenRouter."""
     import base64, httpx
+    if os.getenv("GEMINI_API_KEY"):
+        try:
+            r = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_IMAGE_MODEL}:generateContent",
+                           headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, timeout=120,
+                           json={"contents": [{"parts": [{"text": IMAGE_PROMPT + query}]}],
+                                 "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": "4:3"}}})
+            r.raise_for_status()
+            part = next(p for p in r.json()["candidates"][0]["content"]["parts"] if "inlineData" in p)
+            path.write_bytes(base64.b64decode(part["inlineData"]["data"]))
+            return
+        except Exception as e:
+            print(f"Gemini image failed ({getattr(getattr(e, 'response', None), 'status_code', type(e).__name__)}); trying OpenRouter")
+    if not os.getenv("OPENROUTER_API_KEY"):
+        raise RuntimeError("no image key")
     r = httpx.post("https://openrouter.ai/api/v1/chat/completions", timeout=120,
                    headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
                    json={"model": IMAGE_MODEL, "modalities": ["image", "text"], "image_config": {"aspect_ratio": "4:3"},
-                         "messages": [{"role": "user", "content": "Photorealistic editorial tech-news image, vivid lighting, "
-                                       f"no text, no logos, no watermarks: {query}"}]})
+                         "messages": [{"role": "user", "content": IMAGE_PROMPT + query}]})
     r.raise_for_status()
     url = r.json()["choices"][0]["message"]["images"][0]["image_url"]["url"]
     path.write_bytes(base64.b64decode(url.split(",", 1)[1]))
@@ -253,7 +270,7 @@ def fetch_images(visuals, words, work, total):
                     print(f"Wikipedia lookup failed for '{v['wiki']}' ({type(e).__name__})")
                 if pick:
                     print(f"Wikipedia image for '{v['word']}'")
-            if not pick and not v.get("wiki") and os.getenv("OPENROUTER_API_KEY") and AI_IMAGES_OK[0]:
+            if not pick and not v.get("wiki") and (os.getenv("GEMINI_API_KEY") or os.getenv("OPENROUTER_API_KEY")) and AI_IMAGES_OK[0]:
                 img = work / f"img{n}.png"
                 try:
                     ai_image(v["query"], img)
