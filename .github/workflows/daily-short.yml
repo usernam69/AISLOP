@@ -96,7 +96,7 @@ jobs:
         run: |
           git config user.name "SubtleSpawns bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          for f in runs.csv used_headlines.json stats.csv replies.md part2.json viewer_questions.json viewer_questions.done; do if [ -f "$f" ]; then git add "$f"; fi; done
+          for f in runs.csv used_headlines.json stats.csv replies.md part2.json viewer_questions.json viewer_questions.done time_capsules.json milestone.json milestone.done; do if [ -f "$f" ]; then git add "$f"; fi; done
           git add -u
           git diff --cached --quiet && exit 0
           git commit -m "Daily Short $(date +%F)"

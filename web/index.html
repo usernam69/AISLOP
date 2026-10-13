@@ -123,6 +123,7 @@ details p { white-space: pre-wrap; font-size: 13px; color: var(--text-secondary)
       <div class="chart" id="c-topic"></div>
       <div class="chart" id="c-series"></div>
       <div class="chart" id="c-hour"></div>
+      <div class="chart" id="c-hook"></div>
     </div>
   </section>
 
@@ -263,6 +264,8 @@ async function loadStats() {
   barChart($("#c-topic"), "Average views by topic", "Which subjects your audience watches most", avgBy(pub, s => s.topic), ["Topic", "Avg views"]);
   barChart($("#c-series"), "Average views by series", "Which weekday theme performs best", avgBy(pub, s => s.series), ["Series", "Avg views"]);
   barChart($("#c-hour"), "Average views by upload hour", "When to post", avgBy(pub, s => s.time.slice(0, 2) + ":00"), ["Hour", "Avg views"]);
+  barChart($("#c-hook"), "Average views by hook style", "A/B test: which opening keeps people watching",
+           avgBy(pub.filter(s => s.hook), s => s.hook), ["Hook style", "Avg views"]);
 }
 
 // ---------- replies ----------

@@ -11,9 +11,9 @@ Usage:  python stats.py
 import csv, json
 from collections import defaultdict
 
-from make_short import OUT_DIR, PRIVACY, STATS, VIEWER_QS, get_youtube, llm, parse_json, read_runs, write_runs
+from make_short import MILESTONE, OUT_DIR, PRIVACY, STATS, VIEWER_QS, get_youtube, llm, parse_json, read_runs, write_runs
 
-STAT_FIELDS = ["date", "time", "video_id", "title", "topic", "series", "privacy", "views", "likes", "comments"]
+STAT_FIELDS = ["date", "time", "video_id", "title", "topic", "series", "privacy", "views", "likes", "comments", "hook"]
 
 
 def fetch_stats(yt, rows):
@@ -30,7 +30,7 @@ def fetch_stats(yt, rows):
         s = v["statistics"]
         out.append({"date": r["date"], "time": r["time"], "video_id": v["id"], "title": r["title"], "topic": r["topic"],
                     "series": r["series"], "privacy": v["status"]["privacyStatus"], "views": s.get("viewCount", "0"),
-                    "likes": s.get("likeCount", "0"), "comments": s.get("commentCount", "0")})
+                    "likes": s.get("likeCount", "0"), "comments": s.get("commentCount", "0"), "hook": r.get("hook", "")})
     with open(STATS, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=STAT_FIELDS)
         w.writeheader()
@@ -142,6 +142,22 @@ def update_start_here(yt, stats):
     print(f"'{START_HERE}' playlist: top {len(top)} Shorts")
 
 
+MILESTONES = [100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000]
+
+
+def check_milestone(yt):
+    """When subscribers pass a milestone, tomorrow's Short is a thank-you."""
+    subs = int(yt.channels().list(part="statistics", mine=True).execute()["items"][0]["statistics"].get("subscriberCount", 0))
+    done = MILESTONE.with_suffix(".done")
+    reached = json.loads(done.read_text()) if done.exists() else [m for m in MILESTONES if m <= subs]   # first run: don't celebrate old ones
+    new = [m for m in MILESTONES if m <= subs and m not in reached]
+    if new:
+        MILESTONE.write_text(json.dumps({"subs": max(new)}))
+        print(f"Milestone: {max(new):,} subscribers! Tomorrow's Short says thanks.")
+    done.write_text(json.dumps(sorted(set(reached) | set(new))))
+    print(f"Subscribers: {subs:,}")
+
+
 def republish(yt, rows):
     """YouTube can lock uploads from unaudited apps as private; flip them back to public."""
     ids = [r["video_id"] for r in rows if r.get("video_id")][-50:]
@@ -168,6 +184,10 @@ def main():
     stats = fetch_stats(yt, rows)
     report(stats)
     post_pending_comments(yt, rows, stats)
+    try:
+        check_milestone(yt)
+    except Exception as e:
+        print(f"Milestone check failed ({type(e).__name__})")
     try:
         update_start_here(yt, stats)
     except Exception as e:

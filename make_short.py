@@ -45,7 +45,7 @@ FEEDS = [
     "https://www.tomshardware.com/feeds/all",
 ]
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.force-ssl"]
-RUN_FIELDS = ["date", "time", "folder", "title", "topic", "series", "link", "video_id", "images", "voice", "privacy", "comment_posted"]
+RUN_FIELDS = ["date", "time", "folder", "title", "topic", "series", "link", "video_id", "images", "voice", "privacy", "comment_posted", "hook"]
 
 # one theme per weekday (Monday = 0); "news" False means the script doesn't come from a headline
 SAVE = ' Before the follow line, say "Save this for later."'
@@ -71,6 +71,16 @@ SERIES = [
     [{"name": "Gadget Sunday", "news": True, "brief": "Prefer a gadget or hardware story."},
      {"name": "Is It Worth It", "news": True, "brief": "Pick a gadget or product story. Give a verdict: the price, the main pro, the main con, and who should (and shouldn't) buy it."}],
 ]
+MORE_FORMATS = {0: [{'name': 'Tech Word of the Day', 'news': False, 'brief': 'Ignore the headlines. Explain one current tech buzzword (e.g. RAG, NPU, eSIM, passkey) in plain words with one everyday comparison.'}, {'name': 'AI Explained #{n}', 'news': False, 'brief': "Ignore the headlines. Episode {n} of a numbered series explaining one AI concept (tokens, training, hallucinations, agents...). Say 'AI Explained, number {n}' early. Pick a concept a beginner needs next."}, {'name': 'I Asked AI', 'news': True, 'brief': "Pick a story people have questions about. Frame it as 'I asked an AI chatbot about this', give the typical AI answer, then fact-check it against the real story: what it got right and wrong."}, {'name': 'Future Flashback', 'news': True, 'brief': "Pretend it's 2030 looking back: 'This headline from 2026 changed everything because...'. Make clear it's a thought experiment, then return to what is actually true today."}], 1: [{'name': 'Password Tip', 'news': True, 'brief': 'Tie one quick security habit (password manager, passkeys, 2FA app) to a breach or hack in the news.{save}'}, {'name': 'Delete This App', 'news': False, 'brief': 'Ignore the headlines. Name one real type of app or a specific well-known app that drains battery or harvests data, what it collects, and a safer alternative. Only use well-documented facts.{save}'}, {'name': 'Tech Court', 'news': True, 'brief': "Put a company 'on trial' for a decision in the story: the charge, the case for, the case against, then a verdict."}, {'name': 'Villain Arc', 'news': True, 'brief': "Tell a company's bad week like a dramatic movie trailer ('In a world where...'), then the real facts and what it means for users."}], 2: [{'name': 'Mystery Gadget', 'news': True, 'brief': 'Describe a product from the story with 3 clues without naming it; reveal the name in the last third.'}, {'name': 'Guess the Startup', 'news': True, 'brief': 'Pick a story about a company. Give 3 clues about it without naming it, reveal it in the last third, then the news.'}, {'name': "Don't Watch This", 'news': False, 'brief': "Ignore the headlines. Anti-hook format: open with 'Don't watch this if you like slow Wi-Fi' (or similar), then deliver one genuinely useful hidden tip.{save}"}, {'name': 'Rate the Headline', 'news': True, 'brief': "Read a clickbait-style version of the story's headline, rate it 1 to 10 for accuracy, then explain what is actually true."}, {'name': 'Dueling Headlines', 'news': True, 'brief': 'Pick a story that more than one outlet below covers (or that could be spun two ways). Show how two framings differ and what the facts are.'}], 3: [{'name': "You're Using It Wrong", 'news': False, 'brief': 'Ignore the headlines. Show the better way to use one everyday feature (AirDrop, Ctrl+F, Google search operators, screenshots...).{save}'}, {'name': 'Free Alternative', 'news': False, 'brief': 'Ignore the headlines. Name one popular paid app and a real free alternative (e.g. Photoshop to Photopea), what it does well and its catch.{save}'}, {'name': 'Battery Saver', 'news': False, 'brief': 'Ignore the headlines. One real setting or habit that adds hours of phone or laptop battery, with the exact menu path.{save}'}, {'name': 'Hidden Easter Egg', 'news': False, 'brief': 'Ignore the headlines. Show one real hidden feature, game or easter egg inside a popular app or OS, and how to find it.{save}'}, {'name': 'Should You Upgrade', 'news': True, 'brief': "Pick a new phone, chip or OS story and walk through a yes/no checklist: 'If you have X, skip it. If you need Y, upgrade.'"}, {'name': 'Spec Translator', 'news': True, 'brief': 'Pick a product story and translate its most confusing spec (mAh, nits, TOPS, refresh rate) into real-life meaning.'}], 4: [{'name': 'Speedrun the News', 'news': True, 'brief': "Speedrun format: cover the 5 most interesting headlines below in one Short, one punchy sentence or two each, numbered 'One... Two...'. Hook: 'Five tech stories in 40 seconds, go.' Put the most important link in 'link'."}, {'name': 'Hot Take', 'news': True, 'brief': 'Give one bold but defensible opinion about the story, the strongest argument against it, then ask viewers to pick a side.'}, {'name': 'Leak Watch', 'news': True, 'brief': 'Pick a rumor or leak story. Say what is claimed, how credible the source is, and when we will know for sure.'}, {'name': 'Fail of the Week', 'news': True, 'brief': 'Pick a story about a product, update or launch that went wrong: what happened, why, and what users should do.'}, {'name': 'Billionaire Tech Moves', 'news': True, 'brief': "Pick a story about a big tech CEO or company leader's decision and explain what it means for ordinary users."}, {'name': 'Time Capsule', 'news': True, 'brief': "Make one specific, checkable prediction about this story for one year from now. Say 'Screenshot this, we'll check in a year.' Put the prediction itself in 'prediction'."}, {'name': 'Tech Bingo', 'news': True, 'brief': 'Weekly bingo: list 4 predictable tech-news things (a leak, a lawsuit, an AI launch, a delay) and tick off which happened this week, using the headlines.'}], 5: [{'name': 'Story Time', 'news': False, 'brief': 'Ignore the headlines. Tell the dramatic, true backstory of one famous tech moment (the first iPhone reveal, Y2K, the first website). Only use facts you are certain of.'}, {'name': 'How It Works', 'news': False, 'brief': 'Ignore the headlines. Explain how one everyday technology works (GPS, Wi-Fi, touchscreens, QR codes) in under 45 seconds with one comparison.'}, {'name': 'Old vs New', 'news': False, 'brief': 'Ignore the headlines. Compare one product category 10 years ago vs today (phones, storage, cameras) with 2-3 real numbers.'}, {'name': 'Tech Horoscope', 'news': False, 'brief': "Ignore the headlines. A fun, clearly-for-fun 'which gadget matches your star sign' for 4 signs, then ask viewers their sign in the comments."}], 6: [{'name': 'Head-to-Head', 'news': True, 'brief': 'Pick a product story and compare it head-to-head with its main rival in 3 rounds (price, one key feature, who it is for), naming a winner per round.'}, {'name': 'Tier List', 'news': True, 'brief': 'Rank 5 products or services related to the story from S tier to F tier, revealing one at a time, S last.'}, {'name': 'Price Drop Alert', 'news': True, 'brief': 'Pick a gadget whose price changed or a deal story: the old vs new price, and whether to buy now or wait.'}, {'name': 'Weirdest Tech', 'news': True, 'brief': 'Pick the strangest gadget, patent or experiment in the headlines (or a well-known real one): what it is and whether it could catch on.'}, {'name': 'Startup in 30 Seconds', 'news': True, 'brief': 'Pick a story about a young company: what it does, who it is for, and its biggest risk, in 30 seconds.'}]}
+for _d, _fs in MORE_FORMATS.items():
+    for _f in _fs:
+        _f["brief"] = _f["brief"].replace("{save}", SAVE)
+    SERIES[_d] += _fs
+# A/B test: hook styles rotate by day so the analytics can compare them
+HOOK_STYLES = ["a surprising question", "a bold one-line statement", "a single punchy word on screen (hook_card is ONE word like 'Banned.')",
+               "a reverse hook: start with the ending ('...and that is why your phone is slower'), then rewind"]
+CAPSULES = HERE / "time_capsules.json"       # Time Capsule predictions to revisit in a year
+MILESTONE = HERE / "milestone.json"          # written by stats.py when a subscriber milestone is passed
 EVENT_WORDS = ("keynote", "unpacked", "wwdc", "apple event", "launch event", "made by google", "google i/o", "dev day")
 VIEWER_QS = HERE / "viewer_questions.json"   # written by stats.py
 PART2 = HERE / "part2.json"                  # tomorrow's cliffhanger follow-up
@@ -82,8 +92,23 @@ def pick_series(now, headlines):
         plan = json.loads(PART2.read_text(encoding="utf-8"))
         PART2.unlink()
         if plan.get("date") == now.date().isoformat():
-            return {"name": "Part 2", "news": False, "brief": "This is Part 2 of yesterday's Short. Open with 'Part 2:' and deliver "
-                    f"exactly this promised follow-up: {plan['brief']}"}
+            n = plan.get("part", 2)
+            return {"name": f"Part {n}", "news": False, "part": n, "brief": f"This is Part {n} of a multi-part story. Open with 'Part {n}:' "
+                    f"and deliver exactly this promised follow-up: {plan['brief']}"}
+    if MILESTONE.exists():
+        m = json.loads(MILESTONE.read_text(encoding="utf-8"))
+        MILESTONE.unlink()
+        return {"name": "Milestone", "news": False, "brief": f"Ignore the headlines. The channel just passed {m['subs']:,} subscribers. "
+                "Thank viewers warmly, share one quick behind-the-scenes fact about how the channel makes daily Shorts, "
+                "and ask what topic they want next."}
+    if CAPSULES.exists():
+        caps = json.loads(CAPSULES.read_text(encoding="utf-8"))
+        due = [c for c in caps if c["date"] <= (now.date() - dt.timedelta(days=365)).isoformat()]
+        if due:
+            CAPSULES.write_text(json.dumps([c for c in caps if c is not due[0]], indent=1), encoding="utf-8")
+            return {"name": "Time Capsule Opened", "news": False, "brief": "Ignore the headlines. A year ago today we predicted: "
+                    f"'{due[0]['prediction']}' (about: {due[0]['title']}). Say what actually happened if you know it reliably; "
+                    "if you are not sure, say so honestly and ask viewers to say in the comments whether it came true."}
     if now.month == 12 and now.day >= 30:
         titles = [r["title"].replace("#shorts", "").strip() for r in read_runs() if r["date"][:4] == str(now.year) and r.get("video_id")]
         return {"name": "Year in Review", "news": False, "brief": f"Ignore the headlines. Count down the 5 biggest tech stories of {now.year}, "
@@ -99,7 +124,12 @@ def pick_series(now, headlines):
             return {"name": "Viewer Question", "news": False, "brief": f"Ignore the headlines. Answer this question a viewer named {q['author']} "
                     f"asked in our comments, and thank them by name in the first sentence: {q['question']}"}
     rota = SERIES[now.weekday()]
-    return rota[now.isocalendar().week % len(rota)]
+    pick = dict(rota[now.isocalendar().week % len(rota)])
+    if "{n}" in pick["name"]:   # numbered series: AI Explained #1, #2...
+        base = pick["name"].split("#")[0]
+        n = sum(r["series"].startswith(base) for r in read_runs() if r.get("video_id")) + 1
+        pick["name"], pick["brief"] = pick["name"].replace("{n}", str(n)), pick["brief"].replace("{n}", str(n))
+    return pick
 
 
 def season_brief(today):
@@ -261,14 +291,18 @@ def channel_memory():
 
 def write_script(headlines, series):
     recent, best = channel_memory()
-    brief = series["brief"].format(today=dt.date.today().strftime("%B %d")) + season_brief(dt.date.today())
+    today = dt.date.today()
+    brief = series["brief"].replace("{today}", today.strftime("%B %d")) + season_brief(today)
+    series["hook"] = HOOK_STYLES[today.toordinal() % len(HOOK_STYLES)]
+    if today.toordinal() % 4 == 0:   # now and then, tie the story to the parkour gameplay on screen
+        brief += " Twist: work in one light metaphor linking the story to the parkour run on screen (a risky jump, a near miss, a speedrun)."
     prompt = f"""You write YouTube Shorts for SubtleSpawns, a tech news & tips channel. The host is "Spawn".
 Tone: professional yet engaging, for a tech-savvy audience. No emojis in the script.
 TODAY'S FORMAT: "{series['name']}". {brief}
 The format above overrides the default structure below wherever they differ: follow it exactly, and make the title and hook show the format.
 Unless the format says to ignore the headlines, pick the ONE most fitting technology story below (gadgets, AI, software, security, science tech). Never pick politics, elections, donations, celebrities or movies.
 Write a 40-50 second voiceover (110-130 words):
-- First sentence is a scroll-stopping hook (a surprising fact or question), max 12 words.
+- First sentence is a scroll-stopping hook, max 12 words. Today's hook style: {series['hook']}.
 - Then explain what happened and why it matters, plain language.
 - End with one practical tip or takeaway, then "Follow Spawn for daily tech news", phrased so it flows naturally back into the first sentence when the video loops.
 Also write SEO metadata.
@@ -286,7 +320,8 @@ Reply with ONLY JSON:
 "topic": "one of: ai, security, gadgets, software, science, business",
 "mood": "one of: tense, upbeat, calm",
 "comment_question": "a quick poll to pin as the first comment, answerable in one word or emoji, e.g. 'Would you buy this? Yes or no' or 'Did you know this? Yes / No'",
-"part2": "only if the story is genuinely too big for one Short: one sentence on what Part 2 tomorrow will cover (then end the script with 'Part 2 tomorrow.' instead of the loop line); otherwise empty",
+"prediction": "only for the Time Capsule format: the one-sentence prediction; else empty",
+"part2": "only if the story is genuinely too big for one Short (a deep dive can run to Part 3): one sentence on what Part 2 tomorrow will cover (then end the script with 'Part 2 tomorrow.' instead of the loop line); otherwise empty",
 "visuals": [{{"word": "one key word copied exactly from the script", "query": "2-4 word photo search for it", "wiki": "exact English Wikipedia article title if it is a specific company, product, person or place, else empty"}}]}}
 For "visuals" give 10-14 items, roughly one every 3 seconds: the main nouns (companies, products, people, objects, places), in script order, never in the first sentence.
 "query" must describe a concrete, photographable scene, never an abstract idea: for "booking" use "person booking flight on laptop", for "privacy" use "padlock on laptop keyboard", for "settings" use "smartphone settings screen"."""
@@ -620,7 +655,7 @@ def ass_time(t):
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
 
 
-def make_subs(words, hook, path, total, highlight="&H0000E5FF"):
+def make_subs(words, hook, path, total, highlight="&H0000E5FF", badge=""):
     head = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -629,6 +664,7 @@ PlayResY: 1920
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Cap,Arial Black,96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,7,3,5,80,80,0,1
+Style: Badge,Arial Black,40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00E07A2A,1,0,0,0,100,100,2,0,3,10,0,8,60,60,150,1
 Style: Hook,Arial Black,72,&H0000E5FF,&H00FFFFFF,&H00000000,&HC0000000,1,0,0,0,100,100,0,0,3,18,0,8,60,60,260,1
 Style: Brand,Arial,40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,0,2,40,40,120,1
 
@@ -637,6 +673,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = [f"Dialogue: 1,{ass_time(0)},{ass_time(3.2)},Hook,,0,0,0,,{{\\fad(150,250)\\t(0,200,\\fscx110\\fscy110)\\t(200,400,\\fscx100\\fscy100)}}{hook.upper()}",
              f"Dialogue: 0,{ass_time(0)},{ass_time(total)},Brand,,0,0,0,,@SubtleSpawns"]
+    if badge:   # series label so regular viewers recognise the format
+        lines.append(f"Dialogue: 1,{ass_time(0)},{ass_time(3.2)},Badge,,0,0,0,,{{\\fad(150,250)}}{badge.upper()}")
 
     def styled(w, current):
         if re.search(r"\d", w):   # prices and stats pop in green, slightly bigger
@@ -804,8 +842,12 @@ def save_ready_copy(mp4, meta, stamp):
     READY_DIR.mkdir(exist_ok=True)
     name = re.sub(r"[^\w\- ]", "", meta["title"].replace("#shorts", "")).strip()[:60]
     shutil.copy2(mp4, READY_DIR / f"{stamp} {name}.mp4")
-    (READY_DIR / f"{stamp} {name}.txt").write_text(meta["title"].replace("#shorts", "").strip() + "\n\n" +
-                                                   meta["description"].replace("#Shorts", "#fyp"), encoding="utf-8")
+    title = meta["title"].replace("#shorts", "").strip()
+    tags = " ".join("#" + re.sub(r"\W", "", t) for t in meta.get("tags", [])[:5])
+    (READY_DIR / f"{stamp} {name}.txt").write_text(
+        f"TIKTOK\n{title} {tags} #fyp #technews #learnontiktok\n\n"
+        f"INSTAGRAM REELS\n{title}\n\n{meta['description'].split(chr(10))[0]}\n\n{tags} #reels #technews #techtips\n\n"
+        f"FULL DESCRIPTION\n{meta['description']}", encoding="utf-8")
 
 
 def make_short(do_upload):
@@ -830,7 +872,7 @@ def make_short(do_upload):
     voice, words, voice_name = voice_over(meta["script"], work)
     print("Voice:", voice_name)
     total = min(words[-1][1] + 0.8, 59.0)
-    make_subs(words, meta["hook_card"], work / "subs.ass", total, TOPICS[meta["topic"]][0])
+    make_subs(words, meta["hook_card"], work / "subs.ass", total, TOPICS[meta["topic"]][0], series["name"])
     images = fetch_images(meta["visuals"], words, work, total)
     if any(c for *_, c in images):
         meta["description"] += "\n\nImages:\n" + "\n".join(c for *_, c in images if c)
@@ -840,15 +882,22 @@ def make_short(do_upload):
     print("Rendered:", mp4)
     save_ready_copy(mp4, meta, stamp)
 
-    if meta.get("part2") and series["name"] != "Part 2":
-        PART2.write_text(json.dumps({"date": (now.date() + dt.timedelta(days=1)).isoformat(), "brief": meta["part2"]}), encoding="utf-8")
-        print("Part 2 planned for tomorrow:", meta["part2"])
+    part = series.get("part", 1) + 1
+    if meta.get("part2") and part <= 3:   # up to a three-part deep dive
+        PART2.write_text(json.dumps({"date": (now.date() + dt.timedelta(days=1)).isoformat(), "brief": meta["part2"], "part": part}),
+                         encoding="utf-8")
+        print(f"Part {part} planned for tomorrow:", meta["part2"])
+    if meta.get("prediction") and series["name"] == "Time Capsule":
+        caps = json.loads(CAPSULES.read_text(encoding="utf-8")) if CAPSULES.exists() else []
+        CAPSULES.write_text(json.dumps(caps + [{"date": now.date().isoformat(), "prediction": meta["prediction"],
+                                                "title": meta["title"]}], indent=1), encoding="utf-8")
     if meta["link"]:
         used = json.loads(STATE.read_text()) if STATE.exists() else []
         STATE.write_text(json.dumps(used + [meta["link"]]))
     row = {"date": now.date().isoformat(), "time": now.strftime("%H:%M"), "folder": stamp, "title": meta["title"],
            "topic": meta["topic"], "series": series["name"], "link": meta["link"], "video_id": "",
-           "images": len(images), "voice": voice_name, "privacy": "", "comment_posted": ""}
+           "images": len(images), "voice": voice_name, "privacy": "", "comment_posted": "",
+           "hook": series.get("hook", "").split(" (")[0].split(":")[0]}
     if do_upload:
         row["privacy"] = "review" if REVIEW_MODE else "pending"   # render-only test runs stay blank
     rows = read_runs() + [row]
