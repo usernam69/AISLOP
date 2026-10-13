@@ -218,6 +218,23 @@ def wiki_image(title):
             f"https://commons.wikimedia.org/wiki/File:{page['pageimage'].replace(' ', '_')}"}
 
 
+AI_IMAGES_OK = [True]
+IMAGE_MODEL = os.getenv("IMAGE_MODEL", "google/gemini-3.1-flash-lite-image")
+
+
+def ai_image(query, path):
+    """AI-generated picture for generic words (no logos or text), via OpenRouter."""
+    import base64, httpx
+    r = httpx.post("https://openrouter.ai/api/v1/chat/completions", timeout=120,
+                   headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
+                   json={"model": IMAGE_MODEL, "modalities": ["image", "text"], "image_config": {"aspect_ratio": "4:3"},
+                         "messages": [{"role": "user", "content": "Photorealistic editorial tech-news image, vivid lighting, "
+                                       f"no text, no logos, no watermarks: {query}"}]})
+    r.raise_for_status()
+    url = r.json()["choices"][0]["message"]["images"][0]["image_url"]["url"]
+    path.write_bytes(base64.b64decode(url.split(",", 1)[1]))
+
+
 def fetch_images(visuals, words, work, total):
     """Free photos (Wikipedia first, then Openverse) shown when their word is spoken."""
     import httpx
@@ -236,6 +253,18 @@ def fetch_images(visuals, words, work, total):
                     print(f"Wikipedia lookup failed for '{v['wiki']}' ({type(e).__name__})")
                 if pick:
                     print(f"Wikipedia image for '{v['word']}'")
+            if not pick and not v.get("wiki") and os.getenv("OPENROUTER_API_KEY") and AI_IMAGES_OK[0]:
+                img = work / f"img{n}.png"
+                try:
+                    ai_image(v["query"], img)
+                    print(f"AI image for '{v['word']}'")
+                    shown.append((img, t, min(t + 1.8, total), None))
+                    last_end = shown[-1][2] + 0.1
+                    continue
+                except Exception as e:
+                    print(f"AI image failed for '{v['word']}' ({e.__class__.__name__}); using photo library")
+                    if "402" in str(e):
+                        AI_IMAGES_OK[0] = False   # out of credit: don't retry for every word
             # Openverse: try the full query, then just the key word, so fewer words end up without a photo
             for q in ([] if pick else dict.fromkeys([v["query"], v["word"]])):
                 res = httpx.get("https://api.openverse.org/v1/images/", headers={"User-Agent": "AISLOP/1.0"}, timeout=30,
@@ -392,7 +421,7 @@ def main():
     mp4 = work / "short.mp4"
     images = fetch_images(meta["visuals"], words, work, total)
     if images:
-        meta["description"] += "\n\nImages:\n" + "\n".join(c for *_, c in images)
+        meta["description"] += "\n\nImages:\n" + "\n".join(c for *_, c in images if c)
         (work / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     render(voice, work / "subs.ass", total, mp4, images)
     print("Rendered:", mp4)
