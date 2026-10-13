@@ -1,4 +1,4 @@
-﻿"""Daily tech-news Short for @SubtleSpawns.
+"""Daily tech-news Short for @SubtleSpawns.
 
 Pulls tech headlines, writes a script (Claude), voices it (free Edge TTS),
 renders a 1080x1920 Short over a random slice of the parkour footage with
@@ -8,7 +8,7 @@ Usage:
     python make_short.py            # render only
     python make_short.py --upload   # render + upload
 """
-import argparse, asyncio, datetime as dt, json, os, random, re, subprocess, sys
+import argparse, asyncio, datetime as dt, html, json, os, random, re, subprocess, sys
 from pathlib import Path
 
 import edge_tts, feedparser, imageio_ffmpeg
@@ -37,16 +37,16 @@ def fetch_headlines(n=8):
     items = []
     for url in FEEDS:
         for e in feedparser.parse(url).entries[:6]:
-            if e.get("link") not in used:
-                summary = re.sub("<[^>]+>", "", e.get("summary", ""))[:400]
-                items.append({"title": e.title, "link": e.link, "summary": summary})
+            if e.get("link") not in used and not re.search(r"(?i)elect|donat|republican|democrat|trump|senate|congress|box office|movie", e.title):
+                summary = html.unescape(re.sub("<[^>]+>", "", e.get("summary", ""))).replace("[…]", "")[:400]
+                items.append({"title": html.unescape(e.title), "link": e.link, "summary": summary})
     return items[:n]
 
 
 def write_script(headlines):
     prompt = f"""You write YouTube Shorts for SubtleSpawns, a tech news & tips channel.
 Tone: professional yet engaging, for a tech-savvy audience. No emojis in the script.
-Pick the ONE most interesting story below and write a 40-50 second voiceover (110-130 words):
+Pick the ONE most interesting technology story below (gadgets, AI, software, security, science tech). Never pick politics, elections, donations, celebrities or movies and write a 40-50 second voiceover (110-130 words):
 - First sentence is a scroll-stopping hook (a surprising fact or question), max 12 words.
 - Then explain what happened and why it matters, plain language.
 - End with one practical tip or takeaway, then "Follow for daily tech news."
@@ -63,21 +63,26 @@ Reply with ONLY JSON:
     if os.getenv("OPENROUTER_API_KEY"):
         import httpx
         # paid Claude first; free model if the account has no credits
-        for model in [os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-5.5"), "google/gemma-4-31b-it:free"]:
+        for model in [os.getenv("OPENROUTER_MODEL", "anthropic/claude-haiku-5.5"), "google/gemma-4-31b-it:free"]:
             r = httpx.post("https://openrouter.ai/api/v1/chat/completions", timeout=120,
                            headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
-                           json={"model": model, "max_tokens": 3000,"messages": [{"role": "user", "content": prompt}]})
+                           json={"model": model, "max_tokens": 4000, "reasoning": {"max_tokens": 800}, "messages": [{"role": "user", "content": prompt}]})
             if r.status_code == 200:
                 print("Script written by", model)
-                text = r.json()["choices"][0]["message"]["content"]
-                return json.loads(text[text.find("{"): text.rfind("}") + 1])
+                choice = r.json()["choices"][0]
+                text = choice["message"].get("content") or ""
+                try:
+                    return json.loads(text[text.find("{"): text.rfind("}") + 1])
+                except ValueError:
+                    (OUT_DIR / "last_bad_reply.json").write_text(json.dumps(r.json(), indent=1), encoding="utf-8")
+                    print(f"{model} reply unparseable (finish_reason={choice.get('finish_reason')})")
             print(f"{model} failed ({r.status_code}): {r.text[:200]}")
     if not os.getenv("ANTHROPIC_API_KEY"):
         print("No working AI key - using a basic template script.")
         h = headlines[0]
         return {"link": h["link"], "hook_card": "Tech news in 40 seconds",
                 "script": f"Here's the tech story everyone's talking about. {h['title']}. {h['summary'][:500]} Follow for daily tech news.",
-                "title": f"{h['title'][:60]} #shorts", "description": f"{h['title']}\nSource: {h['link']}\n#tech #technews #shorts",
+                "title": (h['title'] if len(h['title']) <= 60 else h['title'][:60].rsplit(' ', 1)[0]) + " #shorts", "description": f"{h['title']}\nSource: {h['link']}\n#tech #technews #shorts",
                 "tags": ["tech news", "technology", "shorts"]}
     import anthropic
     msg = anthropic.Anthropic().messages.create(
