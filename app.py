@@ -90,7 +90,8 @@ def start_job():
         OUT_DIR.mkdir(exist_ok=True)
         with open(JOB_LOG, "w", encoding="utf-8") as log:  # the child keeps its own copy of the handle
             job["proc"] = subprocess.Popen([sys.executable, "-u", *args], cwd=HERE, stdout=log, stderr=subprocess.STDOUT,
-                                           env=os.environ | {"PYTHONIOENCODING": "utf-8"})
+                                           env=os.environ | {"PYTHONIOENCODING": "utf-8"},
+                                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))  # no console pop-ups
         job["kind"] = kind
     return jsonify({"started": kind})
 
