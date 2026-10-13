@@ -1,4 +1,4 @@
-﻿"""Daily tech-news Short for @SubtleSpawns.
+"""Daily tech-news Short for @SubtleSpawns.
 
 Pulls tech headlines, writes a script (Claude), voices it (free Edge TTS),
 renders a 1080x1920 Short over a random slice of the parkour footage with
@@ -80,14 +80,14 @@ Reply with ONLY JSON:
 "description": "2-3 keyword-rich sentences, then a source line, then 5 hashtags",
 "tags": ["10-15 search keywords"],
 "visuals": [{{"word": "one key word copied exactly from the script", "query": "2-4 word photo search for it"}}]}}
-For "visuals" give 4-6 items: the main nouns (companies, products, objects), in script order, never in the first sentence."""
+For "visuals" give 10-14 items, roughly one every 3 seconds: the main nouns (companies, products, people, objects, places), in script order, never in the first sentence."""
     if os.getenv("OPENROUTER_API_KEY"):
         import httpx
         # paid Claude first; free model if the account has no credits
         for model in [os.getenv("OPENROUTER_MODEL", "anthropic/claude-haiku-5.5"), "google/gemma-4-31b-it:free"]:
             r = httpx.post("https://openrouter.ai/api/v1/chat/completions", timeout=120,
                            headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
-                           json={"model": model, "max_tokens": 4000, "reasoning": {"max_tokens": 800}, "messages": [{"role": "user", "content": prompt}]})
+                           json={"model": model, "max_tokens": 10000, "reasoning": {"effort": "low"}, "messages": [{"role": "user", "content": prompt}]})
             if r.status_code == 200:
                 print("Script written by", model)
                 choice = r.json()["choices"][0]
@@ -202,18 +202,25 @@ def fetch_images(visuals, words, work, total):
         if t is None or t + 1 > total:
             continue
         try:
-            res = httpx.get("https://api.openverse.org/v1/images/", headers={"User-Agent": "AISLOP/1.0"}, timeout=30,
-                            params={"q": v["query"], "license_type": "commercial", "page_size": 5}).json()["results"]
-            pick = next(r for r in res if r["url"].lower().split("?")[0].endswith((".jpg", ".jpeg", ".png")))
+            pick = None
+            # try the full query, then just the key word, so fewer words end up without a photo
+            for q in dict.fromkeys([v["query"], v["word"]]):
+                res = httpx.get("https://api.openverse.org/v1/images/", headers={"User-Agent": "AISLOP/1.0"}, timeout=30,
+                                params={"q": q, "license_type": "commercial", "page_size": 10}).json()["results"]
+                pick = next((r for r in res if r["url"].lower().split("?")[0].endswith((".jpg", ".jpeg", ".png"))), None)
+                if pick:
+                    break
+            if not pick:
+                raise LookupError("no photo")
             img = work / f"img{n}{Path(pick['url'].split('?')[0]).suffix.lower()}"
             img.write_bytes(httpx.get(pick["url"], headers={"User-Agent": "AISLOP/1.0"}, timeout=30, follow_redirects=True).raise_for_status().content)
         except Exception as e:
             print(f"No image for '{v['word']}' ({type(e).__name__})")
             continue
-        end = min(t + 2.0, total)
+        end = min(t + 1.8, total)
         credit = f"\"{pick.get('title') or 'Photo'}\" by {pick.get('creator') or 'unknown'} ({pick['license'].upper()} {pick.get('license_version') or ''}) {pick.get('foreign_landing_url') or pick['url']}"
         shown.append((img, t, end, credit))
-        last_end = end + 0.3
+        last_end = end + 0.1
     print(f"Images: {len(shown)}")
     return shown
 
