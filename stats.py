@@ -8,7 +8,7 @@
 
 Usage:  python stats.py
 """
-import csv, json
+import csv, json, os
 from collections import defaultdict
 
 from make_short import MILESTONE, OUT_DIR, PRIVACY, STATS, VIEWER_QS, get_youtube, llm, parse_json, read_runs, write_runs
@@ -86,8 +86,9 @@ def draft_replies(yt, stats):
             c = t["snippet"]["topLevelComment"]["snippet"]
             if t["snippet"]["totalReplyCount"] == 0 and c.get("authorChannelId", {}).get("value") != me:
                 todo.append({"video": s["title"], "author": c["authorDisplayName"], "comment": " ".join(c["textOriginal"].split())[:300],
-                             "link": f"https://youtube.com/shorts/{s['video_id']}"})
-    save_viewer_questions(todo)
+                             "link": f"https://youtube.com/shorts/{s['video_id']}", "thread": t["id"]})
+    for q in save_viewer_questions(todo):
+        reply_to_question(yt, q)
     if not todo:
         print("\nNo new comments to reply to.")
         return
@@ -114,6 +115,19 @@ def save_viewer_questions(todo):
         VIEWER_QS.write_text(json.dumps(qs + new, indent=1), encoding="utf-8")
         VIEWER_QS.with_suffix(".done").write_text(json.dumps(sorted(seen | {q["question"] for q in new})), encoding="utf-8")
         print(f"Saved {len(new)} viewer question(s) for Saturday Shorts")
+    return [t for t in todo if t["comment"] in {q["question"] for q in new}]
+
+
+def reply_to_question(yt, item):
+    """Answer a viewer's question in the comments right away: it's coming in a Saturday Short."""
+    if os.getenv("AUTO_REPLY_QUESTIONS", "1") != "1":
+        return
+    text = f"Great question, {item['author'].lstrip('@')}! We'll answer it in a Saturday Viewer Question Short. Subscribe so you don't miss it."
+    try:
+        yt.comments().insert(part="snippet", body={"snippet": {"parentId": item["thread"], "textOriginal": text}}).execute()
+        print(f"Replied to {item['author']}'s question")
+    except Exception as e:
+        print(f"Reply failed ({type(e).__name__})")
 
 
 START_HERE = "Start Here: Best of SubtleSpawns"

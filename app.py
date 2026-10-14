@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, request, send_file
 
-from make_short import OUT_DIR, STATS, read_runs
+from make_short import BG_DIR, OUT_DIR, SERIES, STATS, read_runs
 
 HERE = Path(__file__).resolve().parent
 JOB_LOG = OUT_DIR / "app_job.log"
@@ -17,7 +17,10 @@ JOBS = {  # button -> command
     "make_upload": ["make_short.py", "--upload"],
     "stats": ["stats.py"],
     "recap": ["recap.py"],
+    "monthly": ["recap.py", "--month"],
+    "check_login": ["make_short.py", "--check-login"],
 }
+REPO = "usernam69/AISLOP"
 app = Flask(__name__, static_folder=str(HERE / "web"), static_url_path="/static")
 job = {"proc": None, "kind": None}
 last_seen = [time.time()]   # the page pings while its window is open
@@ -62,6 +65,31 @@ def video(folder):
     return send_file(path, mimetype="video/mp4", conditional=True)
 
 
+@app.get("/api/backgrounds")
+def backgrounds():
+    return jsonify(sorted(p.name for p in BG_DIR.glob("*.mp4")) if BG_DIR.exists() else [])
+
+
+@app.get("/api/cloud")
+def cloud():
+    """Last cloud runs (public GitHub API) and the next few days' formats."""
+    import datetime as dt
+    import httpx
+    try:
+        r = httpx.get(f"https://api.github.com/repos/{REPO}/actions/workflows/daily-short.yml/runs?per_page=8", timeout=10).json()
+        runs = [{"when": x["created_at"], "event": x["event"], "status": x["status"], "result": x["conclusion"], "url": x["html_url"]}
+                for x in r.get("workflow_runs", [])]
+    except Exception as e:
+        runs, r = [], {"message": f"Couldn't reach GitHub ({type(e).__name__})"}
+    days = []
+    for k in range(1, 8):
+        d = dt.date.today() + dt.timedelta(days=k)
+        rota = SERIES[d.weekday()]
+        days.append({"date": d.isoformat(), "day": d.strftime("%a"), "format": rota[d.isocalendar().week % len(rota)]["name"].replace(" #{n}", "")})
+    return jsonify({"runs": runs, "error": r.get("message") if not runs else None, "upcoming": days,
+                    "actions_url": f"https://github.com/{REPO}/actions", "secrets_url": f"https://github.com/{REPO}/settings/secrets/actions"})
+
+
 @app.post("/api/ping")
 def ping():
     last_seen[0] = time.time()
@@ -100,13 +128,20 @@ def start_job():
         args = JOBS[kind]
     else:
         abort(400)
+    extra = {}
+    if kind in ("make", "make_upload"):
+        bg, speed = body.get("bg") or "", str(body.get("speed") or "")
+        if bg and bg in backgrounds().get_json():
+            extra["BG_PICK"] = bg
+        if speed in ("1", "1.25", "1.5", "2"):
+            extra["BG_SPEED"] = speed
     with lock:
         if job["proc"] is not None and job["proc"].poll() is None:
             return jsonify({"error": "Another job is still running."}), 409
         OUT_DIR.mkdir(exist_ok=True)
         with open(JOB_LOG, "w", encoding="utf-8") as log:  # the child keeps its own copy of the handle
             job["proc"] = subprocess.Popen([sys.executable, "-u", *args], cwd=HERE, stdout=log, stderr=subprocess.STDOUT,
-                                           env=os.environ | {"PYTHONIOENCODING": "utf-8"},
+                                           env=os.environ | {"PYTHONIOENCODING": "utf-8"} | extra,
                                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))  # no console pop-ups
         job["kind"] = kind
     return jsonify({"started": kind})

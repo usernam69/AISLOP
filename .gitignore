@@ -11,3 +11,4 @@ token_issued.txt
 output/app_job.log
 !backgrounds/*.mp4
 *.exe
+drive_token.json

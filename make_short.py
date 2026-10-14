@@ -154,7 +154,16 @@ NUMBER_STYLE = "{\\c&H0055FF55&\\fscx118\\fscy118}"
 
 
 def notify(title, text):
-    """Windows toast notification (best effort)."""
+    """Phone push via ntfy.sh when NTFY_TOPIC is set, plus a Windows toast (best effort)."""
+    if os.getenv("NTFY_TOPIC"):
+        try:
+            import httpx
+            httpx.post(f"https://ntfy.sh/{os.environ['NTFY_TOPIC']}", content=text.encode("utf-8"), timeout=20,
+                       headers={"Title": title.encode("ascii", "ignore").decode(), "Tags": "movie_camera"})
+        except Exception:
+            pass
+    if os.name != "nt":
+        return
     ps = ("[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null;"
           "$x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
           "$t = $x.GetElementsByTagName('text'); $t.Item(0).AppendChild($x.CreateTextNode($env:TOAST_TITLE)) | Out-Null;"
@@ -202,6 +211,9 @@ def credit_check():
                       headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"}).json()["data"]
         left = d["total_credits"] - d["total_usage"]
         print(f"OpenRouter credit left: ${left:.2f}")
+        if left < float(os.getenv("MIN_CREDIT", "0.10")):
+            os.environ["SKIP_PAID_LLM"] = "1"   # go straight to the free models instead of failing on each paid one
+            print("Credit too low: using free models today.")
         if left < 0.25:
             notify("SubtleSpawns: low OpenRouter credit", f"${left:.2f} left. Gemini will write scripts until you top up.")
     except Exception as e:
@@ -239,7 +251,8 @@ def llm(prompt):
     """Text from Claude via OpenRouter, then free Gemini models. Returns None if all fail."""
     import httpx
     if os.getenv("OPENROUTER_API_KEY"):
-        for model in [os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-5.5"), "anthropic/claude-haiku-5.5", "google/gemma-4-31b-it:free"]:
+        paid = [] if os.getenv("SKIP_PAID_LLM") else [os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-5.5"), "anthropic/claude-haiku-5.5"]
+        for model in paid + ["google/gemma-4-31b-it:free"]:
             try:
                 r = httpx.post("https://openrouter.ai/api/v1/chat/completions", timeout=120,
                                headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
@@ -289,11 +302,29 @@ def channel_memory():
     return recent, best
 
 
+def pick_hook(today):
+    """Rotate hook styles; once each has 3+ public Shorts, use the best one every other day."""
+    hook = HOOK_STYLES[today.toordinal() % len(HOOK_STYLES)]
+    if today.toordinal() % 2 or not STATS.exists():
+        return hook
+    with open(STATS, newline="", encoding="utf-8") as f:
+        views = {}
+        for r in csv.DictReader(f):
+            if r.get("privacy") == "public" and r.get("hook"):
+                views.setdefault(r["hook"], []).append(int(r["views"] or 0))
+    short = {h.split(" (")[0].split(":")[0]: h for h in HOOK_STYLES}
+    if all(len(views.get(k, [])) >= 3 for k in short):
+        best = max(short, key=lambda k: sum(views[k]) / len(views[k]))
+        print("Hook: using the best performer so far:", best)
+        return short[best]
+    return hook
+
+
 def write_script(headlines, series):
     recent, best = channel_memory()
     today = dt.date.today()
     brief = series["brief"].replace("{today}", today.strftime("%B %d")) + season_brief(today)
-    series["hook"] = HOOK_STYLES[today.toordinal() % len(HOOK_STYLES)]
+    series["hook"] = pick_hook(today)
     if today.toordinal() % 4 == 0:   # now and then, tie the story to the parkour gameplay on screen
         brief += " Twist: work in one light metaphor linking the story to the parkour run on screen (a risky jump, a near miss, a speedrun)."
     prompt = f"""You write YouTube Shorts for SubtleSpawns, a tech news & tips channel. The host is "Spawn".
@@ -465,10 +496,25 @@ def tts_elevenlabs(text, mp3):
     return words
 
 
+def elevenlabs_left():
+    """Characters left this month on ElevenLabs (None if unknown)."""
+    import httpx
+    try:
+        d = httpx.get("https://api.elevenlabs.io/v1/user/subscription", timeout=20,
+                      headers={"xi-api-key": os.environ["ELEVENLABS_API_KEY"]}).json()
+        return d["character_limit"] - d["character_count"]
+    except Exception:
+        return None
+
+
 def voice_over(script, work):
     voice = work / "voice.mp3"
     try:
-        if os.getenv("ELEVENLABS_API_KEY") and os.getenv("ELEVENLABS_VOICE_ID"):
+        left = elevenlabs_left() if os.getenv("ELEVENLABS_API_KEY") else None
+        if left is not None and left < len(script):
+            print(f"ElevenLabs has {left} characters left (need {len(script)}); using the free voice.")
+            notify("SubtleSpawns: ElevenLabs used up", f"{left} characters left this month. Using the free voice until it resets.")
+        elif os.getenv("ELEVENLABS_API_KEY") and os.getenv("ELEVENLABS_VOICE_ID"):
             try:
                 words = tts_elevenlabs(script, voice)
                 return voice, words, "elevenlabs"
@@ -719,6 +765,8 @@ def pick_music(mood):
 def render(voice_mp3, subs, total, out_mp4, images=(), mood="upbeat"):
     # the cloud run only has the short clips in backgrounds/, not the 6-hour file
     bgs = [p for p in [BG_VIDEO] + (sorted(BG_DIR.glob("*.mp4")) if BG_DIR.exists() else []) if p.exists()]
+    if os.getenv("BG_PICK") and (BG_DIR / os.environ["BG_PICK"]).exists():   # chosen in the Studio
+        bgs = [BG_DIR / os.environ["BG_PICK"]]
     if not bgs:
         raise FileNotFoundError(f"No background video: set BG_VIDEO or put .mp4 clips in {BG_DIR}")
     bg = random.choice(bgs)
@@ -818,6 +866,10 @@ def upload(mp4, meta):
                              media_body=MediaFileUpload(str(mp4), resumable=True)).execute()
     print(f"Uploaded: https://youtube.com/shorts/{res['id']} ({PRIVACY})")
     try:
+        set_thumbnail(yt, res["id"], cover_frame(mp4, Path(mp4).with_name("cover.jpg")))
+    except Exception as e:
+        print(f"Cover frame failed ({type(e).__name__})")
+    try:
         add_to_playlist(yt, res["id"], meta.get("topic", "gadgets"))
     except Exception as e:
         print(f"Playlist add failed ({type(e).__name__})")
@@ -837,17 +889,76 @@ def upload_latest(folder=None):
     write_runs(rows)
 
 
+def cover_frame(mp4, jpg):
+    """Most eye-catching frame from the first 3 seconds (badge and hook on screen) as the cover image."""
+    subprocess.run([FFMPEG, "-y", "-t", "3", "-i", str(mp4), "-vf", "thumbnail=60", "-frames:v", "1", "-q:v", "2", str(jpg)],
+                   check=True, capture_output=True)
+    return jpg
+
+
+def set_thumbnail(yt, video_id, jpg):
+    from googleapiclient.http import MediaFileUpload
+    try:
+        yt.thumbnails().set(videoId=video_id, media_body=MediaFileUpload(str(jpg))).execute()
+        print("Cover image set")
+    except Exception as e:   # needs a phone-verified channel
+        print(f"Cover image not set ({type(e).__name__})")
+
+
+DRIVE_TOKEN = HERE / "drive_token.json"
+
+
+def drive_login():
+    """One-time: allow uploads to your Google Drive (only to files this app creates)."""
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    creds = InstalledAppFlow.from_client_secrets_file(HERE / "client_secret.json",
+                                                      ["https://www.googleapis.com/auth/drive.file"]).run_local_server(port=0)
+    DRIVE_TOKEN.write_text(creds.to_json())
+    print(f"Saved {DRIVE_TOKEN.name}. For the cloud, paste it into a DRIVE_TOKEN_JSON secret.")
+
+
+def drive_drop(files):
+    """Upload to the 'SubtleSpawns Ready' Drive folder, which Repurpose.io can watch as a source."""
+    if not DRIVE_TOKEN.exists():
+        return
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+    try:
+        creds = Credentials.from_authorized_user_info(json.loads(DRIVE_TOKEN.read_text()))
+        if not creds.valid:
+            creds.refresh(Request())
+        drive = build("drive", "v3", credentials=creds)
+        name = os.getenv("DRIVE_FOLDER", "SubtleSpawns Ready")
+        found = drive.files().list(q=f"name='{name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                                   fields="files(id)").execute()["files"]
+        folder = found[0]["id"] if found else drive.files().create(
+            body={"name": name, "mimeType": "application/vnd.google-apps.folder"}, fields="id").execute()["id"]
+        for f in files:
+            drive.files().create(body={"name": f.name, "parents": [folder]}, media_body=MediaFileUpload(str(f), resumable=True)).execute()
+        print(f"Copied to Google Drive folder '{name}'")
+    except Exception as e:
+        print(f"Drive copy failed ({type(e).__name__}: {e})")
+
+
 def save_ready_copy(mp4, meta, stamp):
-    """Copy + caption for posting to TikTok / Instagram Reels by hand."""
+    """Copy + caption + cover for TikTok / Instagram Reels, also dropped in Google Drive when set up."""
     READY_DIR.mkdir(exist_ok=True)
     name = re.sub(r"[^\w\- ]", "", meta["title"].replace("#shorts", "")).strip()[:60]
     shutil.copy2(mp4, READY_DIR / f"{stamp} {name}.mp4")
+    try:
+        cover_frame(mp4, READY_DIR / f"{stamp} {name}.jpg")
+    except Exception as e:
+        print(f"Cover frame failed ({type(e).__name__})")
     title = meta["title"].replace("#shorts", "").strip()
     tags = " ".join("#" + re.sub(r"\W", "", t) for t in meta.get("tags", [])[:5])
     (READY_DIR / f"{stamp} {name}.txt").write_text(
         f"TIKTOK\n{title} {tags} #fyp #technews #learnontiktok\n\n"
         f"INSTAGRAM REELS\n{title}\n\n{meta['description'].split(chr(10))[0]}\n\n{tags} #reels #technews #techtips\n\n"
         f"FULL DESCRIPTION\n{meta['description']}", encoding="utf-8")
+    drive_drop([f for f in (READY_DIR / f"{stamp} {name}.mp4", READY_DIR / f"{stamp} {name}.txt", READY_DIR / f"{stamp} {name}.jpg")
+                if f.exists()])
 
 
 def make_short(do_upload):
@@ -914,16 +1025,24 @@ def main():
     ap.add_argument("--upload", action="store_true")
     ap.add_argument("--upload-latest", action="store_true")
     ap.add_argument("--upload-folder", help="upload this output folder's Short")
+    ap.add_argument("--check-login", action="store_true", help="make sure the YouTube sign-in still works")
+    ap.add_argument("--drive-login", action="store_true", help="allow copying Shorts to Google Drive")
     args = ap.parse_args()
     try:
-        if args.upload_folder or args.upload_latest:
+        if args.drive_login:
+            drive_login()
+        elif args.check_login:
+            ch = get_youtube().channels().list(part="snippet", mine=True).execute()["items"][0]
+            print("YouTube sign-in OK:", ch["snippet"]["title"])
+        elif args.upload_folder or args.upload_latest:
             upload_latest(args.upload_folder)
         else:
             make_short(args.upload)
     except SystemExit:
         raise
     except Exception as e:
-        notify("SubtleSpawns: daily Short failed", f"{type(e).__name__}: {e}")
+        notify("SubtleSpawns: YouTube sign-in broken" if args.check_login else "SubtleSpawns: daily Short failed",
+               f"{type(e).__name__}: {e}")
         raise
 
 

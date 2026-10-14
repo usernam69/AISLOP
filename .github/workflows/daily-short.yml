@@ -3,6 +3,9 @@
 #   ENV_FILE            - the whole contents of your .env file
 #   CLIENT_SECRET_JSON  - the whole contents of client_secret.json
 #   TOKEN_JSON          - the whole contents of token.json
+# Optional:
+#   DRIVE_TOKEN_JSON    - drive_token.json (from: python make_short.py --drive-login), copies each Short to Google Drive
+#   NTFY_TOPIC in ENV_FILE - phone alerts through the free ntfy app
 name: Daily Short
 
 on:
@@ -71,10 +74,16 @@ jobs:
           ENV_FILE: ${{ secrets.ENV_FILE }}
           CLIENT_SECRET_JSON: ${{ secrets.CLIENT_SECRET_JSON }}
           TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
         run: |
+          if [ -n "$DRIVE_TOKEN_JSON" ]; then printf '%s' "$DRIVE_TOKEN_JSON" > drive_token.json; fi
           printf '%s\n' "$ENV_FILE" > .env
           printf '%s' "$CLIENT_SECRET_JSON" > client_secret.json
           printf '%s' "$TOKEN_JSON" > token.json
+
+      - name: Check the YouTube sign-in
+        if: steps.when.outputs.go == 'yes'
+        run: python -u make_short.py --check-login
 
       - name: Make and upload the Short
         if: steps.when.outputs.go == 'yes'
@@ -85,11 +94,18 @@ jobs:
         continue-on-error: true
         run: python -u stats.py
 
-      - name: Weekly recap (Sundays)
+      - name: Phone alert if anything failed
+        if: failure() && steps.when.outputs.go == 'yes'
+        run: |
+          topic=$(grep -E '^NTFY_TOPIC=' .env | cut -d= -f2- | tr -d '"\r')
+          if [ -n "$topic" ]; then curl -s -H "Title: SubtleSpawns cloud run failed" -d "See $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "https://ntfy.sh/$topic"; fi
+
+      - name: Weekly recap (Sundays) and monthly video (the 1st)
         if: steps.when.outputs.go == 'yes' && success() && github.event_name == 'schedule'
         continue-on-error: true
         run: |
           if [ "$(date +%u)" = "7" ]; then python -u recap.py --upload; fi
+          if [ "$(date +%d)" = "01" ]; then python -u recap.py --month --upload; fi
 
       - name: Save the log back to the repo
         if: steps.when.outputs.go == 'yes' && !cancelled()

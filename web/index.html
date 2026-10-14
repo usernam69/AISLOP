@@ -98,6 +98,7 @@ details p { white-space: pre-wrap; font-size: 13px; color: var(--text-secondary)
     <button role="tab" data-tab="shorts" aria-selected="true">Shorts</button>
     <button role="tab" data-tab="analytics" aria-selected="false">Analytics</button>
     <button role="tab" data-tab="replies" aria-selected="false">Reply drafts</button>
+    <button role="tab" data-tab="cloud" aria-selected="false">Cloud</button>
   </nav>
   <div class="spacer"></div>
   <button class="btn" id="theme" title="Toggle dark mode" aria-label="Toggle dark mode">◐</button>
@@ -108,6 +109,9 @@ details p { white-space: pre-wrap; font-size: 13px; color: var(--text-secondary)
     <button class="btn" data-job="make">Make a test Short</button>
     <button class="btn" data-job="stats">Refresh stats</button>
     <button class="btn" data-job="recap">Build weekly recap</button>
+    <button class="btn" data-job="monthly">Build monthly video</button>
+    <label class="meta">Clip <select id="bg" class="btn"><option value="">Random</option></select></label>
+    <label class="meta">Speed <select id="speed" class="btn"><option>1</option><option>1.25</option><option selected>1.5</option><option>2</option></select></label>
   </div>
   <div class="job" id="job" hidden>
     <strong id="jobTitle"></strong>
@@ -128,6 +132,8 @@ details p { white-space: pre-wrap; font-size: 13px; color: var(--text-secondary)
   </section>
 
   <section id="replies" hidden><div class="replies" id="replyBox"></div></section>
+
+  <section id="cloud" hidden><div class="replies" id="cloudBox"></div></section>
 </main>
 <div class="tip" id="tip"></div>
 
@@ -151,6 +157,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("main section").forEach(s => s.hidden = s.id !== b.dataset.tab);
   if (b.dataset.tab === "analytics") loadStats();
   if (b.dataset.tab === "replies") loadReplies();
+  if (b.dataset.tab === "cloud") loadCloud();
 });
 
 // ---------- Shorts ----------
@@ -183,7 +190,7 @@ async function loadRuns() {
 
 // ---------- jobs ----------
 const JOB_NAMES = {make: "Making a test Short", make_upload: "Making and uploading a Short", stats: "Refreshing stats",
-                   recap: "Building weekly recap", upload: "Uploading"};
+                   recap: "Building weekly recap", upload: "Uploading", monthly: "Building monthly video", check_login: "Checking YouTube sign-in"};
 // two-click confirm inside the page (browser confirm() pop-ups can be blocked, which silently cancelled uploads)
 function confirmClick(b, prompt, go) {
   if (b.dataset.armed) { clearTimeout(+b.dataset.armed); delete b.dataset.armed; b.textContent = b.dataset.label; go(); return; }
@@ -193,7 +200,7 @@ function confirmClick(b, prompt, go) {
 document.querySelectorAll("[data-job]").forEach(b => b.onclick = () =>
   b.dataset.job === "make_upload" ? confirmClick(b, "Click again to make & upload", () => startJob("make_upload")) : startJob(b.dataset.job));
 async function startJob(kind, folder) {
-  const r = await fetch("/api/job", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({kind, folder})});
+  const r = await fetch("/api/job", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({kind, folder, bg: $("#bg").value, speed: $("#speed").value})});
   if (!r.ok) { $("#job").hidden = false; $("#jobTitle").textContent = (await r.json().catch(() => ({}))).error || "Couldn't start that."; return; }
   pollJob();
 }
@@ -281,6 +288,24 @@ async function loadReplies() {
     }).join("") : `<div class="empty">No reply drafts yet. They appear after viewers comment and the daily stats run.</div>`;
 }
 
+// ---------- cloud ----------
+async function loadCloud() {
+  const c = await (await fetch("/api/cloud")).json();
+  const res = r => r.status !== "completed" ? ["pending", cap(r.status.replace("_", " "))] : r.result === "success" ? ["public", "Success"]
+                 : r.result === "skipped" ? ["", "Skipped"] : ["pending", cap(r.result || "unknown")];
+  $("#cloudBox").innerHTML = `<p class="meta">Your Shorts are made in GitHub Actions at 3 PM New York time, even with this PC off.
+      <a href="${esc(c.actions_url)}" target="_blank" rel="noopener">All runs ↗</a> · <a href="${esc(c.secrets_url)}" target="_blank" rel="noopener">Secrets ↗</a>
+      · <button class="btn" data-job="check_login">Check YouTube sign-in</button></p>
+    <h3>Recent cloud runs</h3>` + (c.runs.length ? c.runs.map(r => { const [cls, label] = res(r);
+      return `<div class="item"><span class="pill ${cls}"><i></i>${esc(label)}</span> ${esc(new Date(r.when).toLocaleString())} · ${esc(r.event === "schedule" ? "scheduled" : "manual")}
+        · <a href="${esc(r.url)}" target="_blank" rel="noopener">details ↗</a></div>`; }).join("")
+      : `<div class="empty">${esc(c.error || "No cloud runs yet. Add the 3 secrets, then use Run workflow on GitHub.")}</div>`) +
+    `<h3>Coming up</h3>` + c.upcoming.map(d => `<div class="item">${esc(d.day)} ${esc(d.date.slice(5))} · <strong>${esc(d.format)}</strong></div>`).join("") +
+    `<p class="meta">Specials (Part 2, events, viewer questions, milestones) can replace the planned format on the day.</p>`;
+  $("#cloudBox [data-job]").onclick = () => startJob("check_login");
+}
+
+fetch("/api/backgrounds").then(r => r.json()).then(l => l.forEach(n => $("#bg").add(new Option(n.replace(".mp4", ""), n)))).catch(() => {});
 loadRuns(); pollJob();
 // tell the app this window is still open (it shuts down a while after the window closes)
 const ping = () => fetch("/api/ping", {method: "POST"}).catch(() => {});
