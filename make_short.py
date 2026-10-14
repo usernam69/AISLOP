@@ -239,7 +239,7 @@ def llm(prompt):
     """Text from Claude via OpenRouter, then free Gemini models. Returns None if all fail."""
     import httpx
     if os.getenv("OPENROUTER_API_KEY"):
-        for model in [os.getenv("OPENROUTER_MODEL", "anthropic/claude-haiku-5.5"), "google/gemma-4-31b-it:free"]:
+        for model in [os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-5.5"), "anthropic/claude-haiku-5.5", "google/gemma-4-31b-it:free"]:
             try:
                 r = httpx.post("https://openrouter.ai/api/v1/chat/completions", timeout=120,
                                headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
