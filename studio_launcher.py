@@ -1,15 +1,14 @@
-"""SubtleSpawns Studio.exe: starts app.py with your installed Python and shows it in its own window.
+"""SubtleSpawns Studio.exe: starts app.py with your installed Python and shows it in its own window (Edge app mode).
 
 Build:  python -m PyInstaller --onefile --windowed --name "SubtleSpawns Studio" --icon web/icon.ico studio_launcher.py
 Keep the .exe in the AISLOP folder (it runs app.py from the folder it sits in).
 """
-import shutil, subprocess, sys, time, urllib.request
+import ctypes, os, shutil, subprocess, sys, time, urllib.request, webbrowser
 from pathlib import Path
-
-import webview
 
 URL = "http://127.0.0.1:5055"
 HERE = Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve().parent
+EDGE = [Path(os.environ.get(v, "")) / "Microsoft/Edge/Application/msedge.exe" for v in ("ProgramFiles(x86)", "ProgramFiles", "LocalAppData")]
 
 
 def up():
@@ -24,19 +23,27 @@ def main():
     server = None
     if not up():   # not already open in another window
         if not (HERE / "app.py").exists():
-            webview.create_window("SubtleSpawns Studio", html=f"<p style='font:16px system-ui;padding:20px'>Put this .exe in the "
-                                  f"AISLOP folder (next to app.py). It is in {HERE}.</p>")
-            webview.start()
+            ctypes.windll.user32.MessageBoxW(0, f"Put this .exe in the AISLOP folder (next to app.py).\nIt is in {HERE}.",
+                                             "SubtleSpawns Studio", 0x10)
             return
         python = shutil.which("pythonw") or shutil.which("python")
+        if not python:
+            ctypes.windll.user32.MessageBoxW(0, "Python isn't installed (or isn't on PATH).", "SubtleSpawns Studio", 0x10)
+            return
         server = subprocess.Popen([python, "app.py"], cwd=HERE, creationflags=subprocess.CREATE_NO_WINDOW,
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(100):
             if up() or server.poll() is not None:
                 break
             time.sleep(0.2)
-    webview.create_window("SubtleSpawns Studio", URL, width=1200, height=850, min_size=(420, 500))
-    webview.start()
+    edge = next((p for p in EDGE if p.exists()), None)
+    if edge:
+        # its own profile folder keeps this window a separate process, so we know when it's closed
+        subprocess.run([str(edge), f"--app={URL}", f"--user-data-dir={HERE / 'output' / 'studio_window'}",
+                        "--window-size=1200,850", "--no-first-run"])
+    else:
+        webbrowser.open(URL)
+        return   # no way to tell when a normal browser tab closes, so leave the server running
     if server:
         server.terminate()
 
