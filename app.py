@@ -2,7 +2,7 @@
 
 Run:  python app.py   then open http://127.0.0.1:5055  (only reachable from this PC)
 """
-import csv, json, os, re, subprocess, sys, threading
+import csv, json, os, re, subprocess, sys, threading, time
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, request, send_file
@@ -20,6 +20,7 @@ JOBS = {  # button -> command
 }
 app = Flask(__name__, static_folder=str(HERE / "web"), static_url_path="/static")
 job = {"proc": None, "kind": None}
+last_seen = [time.time()]   # the page pings while its window is open
 lock = threading.Lock()
 
 
@@ -61,6 +62,21 @@ def video(folder):
     return send_file(path, mimetype="video/mp4", conditional=True)
 
 
+@app.post("/api/ping")
+def ping():
+    last_seen[0] = time.time()
+    return "", 204
+
+
+def auto_exit():
+    """Studio window mode: quit once the window has been closed for 2 minutes and no job is running."""
+    while True:
+        time.sleep(15)
+        busy = job["proc"] is not None and job["proc"].poll() is None
+        if not busy and time.time() - last_seen[0] > 120:
+            os._exit(0)
+
+
 @app.get("/api/job")
 def job_status():
     with lock:
@@ -98,4 +114,6 @@ def start_job():
 
 if __name__ == "__main__":
     print("SubtleSpawns control panel: http://127.0.0.1:5055")
+    if os.getenv("STUDIO_AUTO_EXIT") == "1":
+        threading.Thread(target=auto_exit, daemon=True).start()
     app.run(host="127.0.0.1", port=5055, debug=False)

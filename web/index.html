@@ -282,6 +282,9 @@ async function loadReplies() {
 }
 
 loadRuns(); pollJob();
+// tell the app this window is still open (it shuts down a while after the window closes)
+const ping = () => fetch("/api/ping", {method: "POST"}).catch(() => {});
+ping(); setInterval(ping, 5000);
 </script>
 </body>
 </html>

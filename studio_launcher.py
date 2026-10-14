@@ -30,22 +30,28 @@ def main():
         if not python:
             ctypes.windll.user32.MessageBoxW(0, "Python isn't installed (or isn't on PATH).", "SubtleSpawns Studio", 0x10)
             return
-        server = subprocess.Popen([python, "app.py"], cwd=HERE, creationflags=subprocess.CREATE_NO_WINDOW,
-                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(100):
-            if up() or server.poll() is not None:
-                break
-            time.sleep(0.2)
+        (HERE / "output").mkdir(exist_ok=True)
+        log_path = HERE / "output" / "studio_server.log"
+        with open(log_path, "w", encoding="utf-8") as log:
+            server = subprocess.Popen([python, "app.py"], cwd=HERE, creationflags=subprocess.CREATE_NO_WINDOW,
+                                      stdout=log, stderr=subprocess.STDOUT, env=os.environ | {"STUDIO_AUTO_EXIT": "1"})
+        deadline = time.time() + 90   # a cold start (antivirus scanning, first import) can be slow
+        while not up():
+            if server.poll() is not None or time.time() > deadline:
+                tail = log_path.read_text(encoding="utf-8", errors="replace")[-1500:]
+                ctypes.windll.user32.MessageBoxW(0, "The Studio couldn't start:\n\n" + (tail or "no output"), "SubtleSpawns Studio", 0x10)
+                server.kill()
+                return
+            time.sleep(0.3)
     edge = next((p for p in EDGE if p.exists()), None)
     if edge:
-        # its own profile folder keeps this window a separate process, so we know when it's closed
-        subprocess.run([str(edge), f"--app={URL}", f"--user-data-dir={HERE / 'output' / 'studio_window'}",
-                        "--window-size=1200,850", "--no-first-run"])
+        # Edge relaunches itself and lingers in the background, so it can't tell us when the window closes;
+        # the app watches for the page's pings instead and exits on its own (STUDIO_AUTO_EXIT).
+        subprocess.Popen([str(edge), f"--app={URL}", f"--user-data-dir={HERE / 'output' / 'studio_window'}",
+                          "--window-size=1200,850", "--no-first-run"])
     else:
         webbrowser.open(URL)
-        return   # no way to tell when a normal browser tab closes, so leave the server running
-    if server:
-        server.terminate()
+    # the server exits by itself a couple of minutes after the window (or tab) closes
 
 
 if __name__ == "__main__":
