@@ -1,7 +1,9 @@
-date,time,video_id,title,topic,series,privacy,views,likes,comments
-2026-10-13,05:00,gW_J_lqYO1U,OpenAI Agents Tried to Hack Wikipedia Tools #shorts,ai,Security Tuesday,public,4,0,0
-2026-10-13,06:12,4v94LVV6qvA,Safari vs Chrome: Why Apple Says Ditch Chrome #shorts,security,Security Tuesday,public,0,0,0
-2026-10-13,09:37,i2jcalU4Trw,Danish Registry Breach: 123456 Password Exposed 8.8M Records #shorts,security,Security Tuesday,public,0,0,0
-2026-10-13,09:51,q7LNuX_A6Gw,AI Math Proofs Nobody Can Check Yet: OpenAI Research #shorts,ai,Security Tuesday,public,0,0,0
-2026-10-13,10:04,O10Qiw6aY14,AI Agent Dots: OpenAI Automates Online Tasks #shorts,ai,Security Tuesday,public,0,0,0
-2026-10-13,10:21,tgBtcyDZtfI,Self-Replicating AI Worm Warning From Anthropic #shorts,security,Security Tuesday,public,0,0,0
+date,time,video_id,title,topic,series,privacy,views,likes,comments,hook
+2026-10-13,05:00,gW_J_lqYO1U,OpenAI Agents Tried to Hack Wikipedia Tools #shorts,ai,Security Tuesday,public,6,0,0,
+2026-10-13,06:12,4v94LVV6qvA,Safari vs Chrome: Why Apple Says Ditch Chrome #shorts,security,Security Tuesday,public,17,0,1,
+2026-10-13,09:37,i2jcalU4Trw,Danish Registry Breach: 123456 Password Exposed 8.8M Records #shorts,security,Security Tuesday,public,2,0,1,
+2026-10-13,09:51,q7LNuX_A6Gw,AI Math Proofs Nobody Can Check Yet: OpenAI Research #shorts,ai,Security Tuesday,public,23,0,1,
+2026-10-13,10:04,O10Qiw6aY14,AI Agent Dots: OpenAI Automates Online Tasks #shorts,ai,Security Tuesday,public,1,0,1,
+2026-10-13,10:21,tgBtcyDZtfI,Self-Replicating AI Worm Warning From Anthropic #shorts,security,Security Tuesday,public,20,0,1,
+2026-10-13,17:15,aVIu6yuLzuw,Desktop Fusion Reactor: Cambridge Heavy Industries #shorts,science,Security Tuesday,public,4,0,1,
+2026-10-14,17:58,fZcJLxtU-qA,Quiz Wednesday: North Korea Fake Remote Workers Scheme #shorts,security,Quiz Wednesday,public,0,0,0,a reverse hook
