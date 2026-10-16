@@ -876,6 +876,13 @@ def upload(mp4, meta):
     return res["id"]
 
 
+def delete_local(mp4):
+    """Once it's on YouTube, free the disk (the cloud keeps its copies for the weekly and monthly recaps)."""
+    if not os.getenv("CI"):
+        Path(mp4).unlink(missing_ok=True)
+        print("Deleted the local copy:", mp4)
+
+
 def upload_latest(folder=None):
     """Review mode: upload the newest rendered Short that hasn't been uploaded (or a specific folder)."""
     rows = read_runs()
@@ -887,6 +894,7 @@ def upload_latest(folder=None):
     row["video_id"] = upload(work / "short.mp4", json.loads((work / "meta.json").read_text(encoding="utf-8")))
     row["privacy"] = PRIVACY
     write_runs(rows)
+    delete_local(work / "short.mp4")
 
 
 def cover_frame(mp4, jpg):
@@ -1018,6 +1026,7 @@ def make_short(do_upload):
     elif do_upload:
         row["video_id"], row["privacy"] = upload(mp4, meta), PRIVACY
         write_runs(rows)
+        delete_local(mp4)
 
 
 def main():
