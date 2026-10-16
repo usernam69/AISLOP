@@ -880,7 +880,9 @@ def delete_local(mp4):
     """Once it's on YouTube, free the disk (the cloud keeps its copies for the weekly and monthly recaps)."""
     if not os.getenv("CI"):
         Path(mp4).unlink(missing_ok=True)
-        print("Deleted the local copy:", mp4)
+        for copy in READY_DIR.glob(f"{Path(mp4).parent.name} *.mp4"):   # the TikTok / Reels copy (Drive keeps its own)
+            copy.unlink(missing_ok=True)
+        print("Deleted the local copies:", mp4)
 
 
 def upload_latest(folder=None):
